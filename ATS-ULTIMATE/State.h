@@ -37,6 +37,8 @@ extern bool g_cmdVolume, g_cmdStep, g_cmdBw, g_cmdBand;
 extern bool g_settingsActive, g_sMeterOn, g_muteVolume;
 extern bool g_displayRDS, g_processFreqChange;
 extern uint32_t g_lastFreqChange;
+extern bool g_showSmeterBar;
+extern bool g_isEditingSetting;
 
 // Línea de borrado unificada
 extern char _literal_EmptyLine[17];
@@ -83,6 +85,6 @@ extern const uint8_t g_SWSubBandCount;
 extern const uint8_t g_lastBand;
 extern int8_t g_bandIndex;
 
-extern volatile int g_encoderCount;
+extern volatile int8_t g_encoderCount;
 extern uint16_t g_currentFrequency;
 extern uint16_t g_previousFrequency;

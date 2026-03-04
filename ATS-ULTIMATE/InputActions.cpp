@@ -19,79 +19,119 @@ inline void doBandwidthLogic(int8_t& bwIndex, uint8_t upperLimit, uint8_t v)
 }
 
 // --- Eventos de Botones ---
-uint8_t volumeEvent(uint8_t event, uint8_t pin)
-{
-    if (g_muteVolume)
-    {
-        if (event == BUTTONEVENT_SHORTPRESS || event == BUTTONEVENT_FIRSTLONGPRESS)
-            doVolume(1);
-    }
-
-    if (!g_muteVolume)
-    {
-        if (event == BUTTONEVENT_FIRSTLONGPRESS || event == BUTTONEVENT_LONGPRESS)
-            doVolume(g_encoderCount);
+uint8_t volPlusEvent(uint8_t event, uint8_t pin) {
+    if (event == BUTTONEVENT_SHORTPRESS) doVolume(1);
+    else if (event == BUTTONEVENT_FIRSTLONGPRESS || event == BUTTONEVENT_LONGPRESS) {
+        doVolume(2); // Sube más rápido
     }
     return event;
 }
 
-uint8_t stepEvent(uint8_t event, uint8_t pin)
-{
+uint8_t volMinusEvent(uint8_t event, uint8_t pin) {
+    if (event == BUTTONEVENT_SHORTPRESS) {
+        g_muteVolume = !g_muteVolume;
+        if (g_muteVolume) {
+            g_si4735.setVolume(0);
+        } else {
+            doVolume(0); // Restaura el volumen anterior
+        }
+        showStatus(true);
+    }
+    return event;
+}
+
+uint8_t bandPlusEvent(uint8_t event, uint8_t pin) {
+    if (g_settingsActive) {
+        // Cambiar de página en ajustes
+        g_SettingsPage++;
+        if (g_SettingsPage * 3 >= SETTINGS_MAX) g_SettingsPage = 0;
+        showSettings();
+    } else {
+        if (event == BUTTONEVENT_SHORTPRESS) {
+            // Entrar en modo selección de banda con encoder (puedes implementarlo)
+            doBand(1);
+        } else if (event == BUTTONEVENT_FIRSTLONGPRESS || event == BUTTONEVENT_LONGPRESS) {
+            doBand(1); // Scroll rápido
+        }
+    }
+    return event;
+}
+
+uint8_t bandMinusEvent(uint8_t event, uint8_t pin) {
+    if (event == BUTTONEVENT_SHORTPRESS) {
+        g_settingsActive = !g_settingsActive;
+        if (g_settingsActive) showSettings();
+        else {
+            saveState(); // Guardar al cerrar
+            showStatus(true);
+        }
+    } else if (event == BUTTONEVENT_FIRSTLONGPRESS || event == BUTTONEVENT_LONGPRESS) {
+        if (!g_settingsActive) doBand(-1); // Scroll rápido atrás
+    }
+    return event;
+}
+
+uint8_t stepEvent(uint8_t event, uint8_t pin) {
     if (event == BUTTONEVENT_SHORTPRESS) doStep(1);
+    else if (event == BUTTONEVENT_FIRSTLONGPRESS) {
+        g_showSmeterBar = !g_showSmeterBar; // Debes declarar esta variable en State.h
+        showStatus(true);
+    }
     return event;
 }
 
-uint8_t bandEvent(uint8_t event, uint8_t pin)
-{
-    if (event == BUTTONEVENT_SHORTPRESS) bandSwitch(true);
-    else if (event == BUTTONEVENT_FIRSTLONGPRESS) bandSwitch(false);
+uint8_t agcEvent(uint8_t event, uint8_t pin) {
+    if (event == BUTTONEVENT_SHORTPRESS) {
+        static bool screenOn = true;
+        screenOn = !screenOn;
+        if (screenOn) oled.on(); else oled.off();
+    } else if (event == BUTTONEVENT_FIRSTLONGPRESS && isSSB()) {
+        // Lógica para SYNC (si tu librería/chip lo soporta en ese modo)
+    }
+    return event;
+}
+
+uint8_t modeEvent(uint8_t event, uint8_t pin) {
+    if (event == BUTTONEVENT_SHORTPRESS) doMode(1);
+    return event;
+}
+
+uint8_t bwEvent(uint8_t event, uint8_t pin) {
+    if (event == BUTTONEVENT_SHORTPRESS) doBandwidth(1);
+    return event;
+}
+
+
+uint8_t tuneEvent(uint8_t event, uint8_t pin) {
+    if (event == BUTTONEVENT_SHORTPRESS) {
+        if (g_settingsActive) {
+            // Si estamos en ajustes, clic para seleccionar/confirmar
+            g_isEditingSetting = !g_isEditingSetting; 
+            showSettings();
+        } else {
+            // Lógica de Escaneo o cambio rápido de Step en SSB
+            if (isSSB()) doStep(1);
+	    else if (g_Settings[SettingsIndex::ScanSwitch].param == 1) {
+                // Llamar a función de escaneo
+            }
+        }
+    }
     return event;
 }
 
 // --- Sintonización de Frecuencia ---
-void doFrequencyTune()
-{
-    if (g_bandIndex == FM_BAND_TYPE)
-    {
-        g_currentFrequency += g_tabStepFM[g_FMStepIndex] * g_encoderCount;
-    }
-    else
-    {
-        g_currentFrequency += g_tabStep[g_stepIndex] * g_encoderCount;
-    }
-
-    uint16_t bMin = g_bandList[g_bandIndex].minimumFreq;
-    uint16_t bMax = g_bandList[g_bandIndex].maximumFreq;
-
-    if (g_currentFrequency > bMax) g_currentFrequency = bMin;
-    else if (g_currentFrequency < bMin) g_currentFrequency = bMax;
-
-    g_bandList[g_bandIndex].currentFreq = g_currentFrequency;
-    g_processFreqChange = true;
-    g_lastFreqChange = millis();
-
-    showFrequency();
+void doFrequencyTune(int8_t v) {
+    int step = getSteps();
+    if (v > 0) g_currentFrequency += step;
+    else g_currentFrequency -= step;
+    
+    g_si4735.setFrequency(g_currentFrequency);
+    showFrequency(false);
 }
 
-void doFrequencyTuneSSB()
-{
-    const int BFOMax = 16000;
-    int step = (g_encoderCount > 0) ? getSteps() : -getSteps();
-    int newBFO = g_currentBFO + step;
-
-    if (newBFO > BFOMax) {
-        g_currentFrequency += (newBFO / 1000);
-        newBFO %= 1000;
-    } else if (newBFO < -BFOMax) {
-        g_currentFrequency -= (abs(newBFO) / 1000);
-        newBFO %= 1000;
-    }
-
-    g_currentBFO = newBFO;
-    updateBFO();
-    g_processFreqChange = true;
-    g_lastFreqChange = millis();
-    showFrequency();
+void doFrequencyTuneSSB(int8_t v) {
+    // Lógica para SSB (puedes copiar la de doFrequencyTune por ahora)
+    doFrequencyTune(v);
 }
 
 // --- Callbacks de la Estructura Settings ---

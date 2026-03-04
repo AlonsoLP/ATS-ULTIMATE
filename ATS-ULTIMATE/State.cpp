@@ -92,6 +92,9 @@ uint16_t SWSubBands[] = {
 };
 const uint8_t g_SWSubBandCount = sizeof(SWSubBands) / sizeof(uint16_t);
 
-volatile int g_encoderCount = 0;
+volatile int8_t g_encoderCount = 0;
 uint16_t g_currentFrequency = 0;
 uint16_t g_previousFrequency = 0;
+
+bool g_showSmeterBar = true;
+bool g_isEditingSetting = false;

@@ -3,19 +3,23 @@
 #include <Tiny4kOLED_common.h> // Esto define los tipos y fuentes, pero NO crea el objeto 'oled'
 extern SSD1306PrintDevice oled; // Avisamos que la 'oled' real está en otro sitio
 
-// --- Pines de Hardware ---
+// --- Pines de Hardware (Ajustado para ATS-20+) ---
 #define RESET_PIN                   12
 #define ENCODER_PIN_A                2
 #define ENCODER_PIN_B                3
-#define ENCODER_BUTTON               4
+#define ENCODER_BUTTON              14  // Pin A0 (Botón del sintonizador)
 
-#define VOLUME_BUTTON                5
-#define STEP_BUTTON                  6
-#define BAND_BUTTON                  7
-#define MODE_SWITCH                  8
-#define BANDWIDTH_BUTTON             9
-#define AGC_BUTTON                  10
-#define SOFTMUTE_BUTTON             11
+// Botones Fila Superior
+#define MODE_SWITCH                  4
+#define BANDWIDTH_BUTTON             5
+#define STEP_BUTTON                 10
+#define AGC_BUTTON                  11
+
+// Botones Fila Inferior (Volumen y Banda)
+#define VOLUME_UP_BUTTON             6  // VOL+
+#define VOLUME_DN_BUTTON             7  // VOL- (Antes causaba error como AVC_BUTTON)
+#define BAND_UP_BUTTON               8  // BAND+
+#define BAND_DN_BUTTON               9  // BAND- (Antes SOFTMUTE_BUTTON)
 
 // --- Configuración Visual ---
 #define DEFAULT_FONT                FONT8X16P

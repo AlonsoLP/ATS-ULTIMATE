@@ -4,25 +4,52 @@
 #include "Utils.h"
 #include "RadioCtrl.h"
 #include "InputActions.h"
+#include "font14x24sevenSeg.h"
+
+void oledPrint(const char* text, uint8_t x, uint8_t y, const DCfont* font = DEFAULT_FONT, bool invert = false) {
+    oled.setFont(font);
+    oled.setCursor(x, y);
+    if (invert) {
+        // Lógica de inversión si tu librería la soporta, o simplemente:
+    }
+    oled.print(text);
+}
 
 void showFrequency(bool cleanDisplay)
 {
     if (g_settingsActive) return;
 
     char freqDisplay[12];
+    
+    // Si se nos pide limpiar (ej. al cambiar de banda), borramos solo el área numéricapara evitar parpadeos bruscos
+    if (cleanDisplay) {
+        oledPrint("        ", 15, 2, FONT14X24SEVENSEG);
+    }
+
     if (g_bandIndex == FM_IDX)
     {
-        // Formato para FM: 104.20
-        dtostrf(g_currentFrequency / 100.0, 6, 2, freqDisplay);
-        oledPrint(freqDisplay, 20, 2, DEFAULT_FONT);
-        oledPrint("MHz", 85, 2, DEFAULT_FONT);
+        // Optimización CPU: Adiós al float. Calculamos los MHz y los decimales por separado
+        int mhz = g_currentFrequency / 100;
+        int decimales = g_currentFrequency % 100;
+        
+        sprintf(freqDisplay, "%3d.%02d", mhz, decimales);
+        oledPrint(freqDisplay, 15, 2, FONT14X24SEVENSEG); 
+        oledPrint("MHz", 102, 4, DEFAULT_FONT);
     }
     else
     {
-        // Formato para AM/SW: 15400
-        sprintf(freqDisplay, "%5u", g_currentFrequency);
-        oledPrint(freqDisplay, 30, 2, DEFAULT_FONT);
-        oledPrint("kHz", 85, 2, DEFAULT_FONT);
+        // Optimización CPU para AM/SW y formateo con separación de miles
+        int miles = g_currentFrequency / 1000;
+        int unidades = g_currentFrequency % 1000;
+
+        if (miles > 0) {
+            sprintf(freqDisplay, "%2d %03d", miles, unidades);
+        } else {
+            sprintf(freqDisplay, "   %3d", unidades);
+        }
+        
+        oledPrint(freqDisplay, 15, 2, FONT14X24SEVENSEG);
+        oledPrint("kHz", 102, 4, DEFAULT_FONT);
     }
 }
 

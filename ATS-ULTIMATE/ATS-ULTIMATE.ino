@@ -9,14 +9,16 @@
 #include "DisplayUI.h"
 #include "InputActions.h"
 
-// --- Instancias de Botones (Clase definida en Utils.h) ---
-Button btnVolume(VOLUME_BUTTON);
-Button btnStep(STEP_BUTTON);
-Button btnBand(BAND_BUTTON);
-Button btnMode(MODE_SWITCH);
-Button btnBw(BANDWIDTH_BUTTON);
-Button btnAvc(AGC_BUTTON);
-Button btnSoftMute(SOFTMUTE_BUTTON);
+// --- INSTANCIAS DE BOTONES ---
+Button btnVolP(VOLUME_UP_BUTTON);    // Pin 6
+Button btnVolM(VOLUME_DN_BUTTON);    // Pin 7
+Button btnBandP(BAND_UP_BUTTON);     // Pin 8
+Button btnBandM(BAND_DN_BUTTON);     // Pin 9
+Button btnStep(STEP_BUTTON);        // Pin 10
+Button btnMode(MODE_SWITCH);        // Pin 4
+Button btnBw(BANDWIDTH_BUTTON);     // Pin 5
+Button btnAgc(AGC_BUTTON);          // Pin 11
+Button btnTune(ENCODER_BUTTON);     // Pin 14 (A0)
 
 // --- Manejo del Encoder por Interrupción ---
 // Esta función se ejecuta cada vez que giras el encoder
@@ -35,12 +37,24 @@ void readEncoder() {
 
 // --- Configuración Inicial ---
 void setup() {
+    // 0. Inicializar I2C
+    Wire.begin();           
+    Wire.setClock(400000);  // Aceleramos a 400 kHz (Fast Mode)
+
     // 1. Inicializar Pantalla OLED
     oled.begin();
     oled.clear();
     oled.on();
     oled.switchRenderFrame();
-    
+
+    // Lógica de Reset EEPROM (Botón pulsado al encender)
+    if (digitalRead(ENCODER_BUTTON) == LOW) {
+        oled.clear();
+        oledPrint("EEPROM RESET", 20, 2, DEFAULT_FONT);
+        resetEEPROM();
+        delay(2000);
+    }
+
     oledPrint("ATS-EX v1.0", 25, 0, DEFAULT_FONT);
     oledPrint("SISTEMA LISTO", 20, 3, DEFAULT_FONT);
     
@@ -67,53 +81,53 @@ void setup() {
     showStatus(true);
 }
 
-// --- Bucle Principal ---
 void loop() {
-    
+
     // --- 1. PROCESAR ENCODER ---
+    int8_t rotacion = 0;
+
+    // Extracción segura (Lectura Atómica)
+    // Pausamos las interrupciones un microsegundo para copiar el valor sin que se corrompa
+    noInterrupts(); 
     if (g_encoderCount != 0) {
+        rotacion = g_encoderCount;
+        g_encoderCount = 0; // Consumimos el evento aquí de forma segura
+    }
+    interrupts(); // Volvemos a encender las interrupciones
+
+    // Ahora usamos nuestra copia local 'rotacion' en lugar de la variable global
+    if (rotacion != 0) {
         if (g_settingsActive) {
             // Si estamos dentro del menú de ajustes
-            g_Settings[g_SettingSelected].manipulateCallback(g_encoderCount);
+            g_Settings[g_SettingSelected].manipulateCallback(rotacion);
             showSettings();
         } 
         else if (g_cmdVolume) {
             // Si el modo volumen está activo (por pulsación de botón)
-            doVolume(g_encoderCount);
+            doVolume(rotacion);
         } 
         else {
             // Sintonización normal de frecuencia
             if (isSSB()) {
-                doFrequencyTuneSSB();
+                doFrequencyTuneSSB(rotacion);
             } else {
-                doFrequencyTune();
+                doFrequencyTune(rotacion);
             }
         }
         
-        g_encoderCount = 0;      // Consumir el evento
-        g_storeTime = millis();  // Reiniciar temporizador de guardado
+        g_storeTime = millis(); // Reiniciar temporizador de guardado
     }
 
     // --- 2. PROCESAR BOTONES ---
-    btnVolume.checkEvent(volumeEvent);
+    btnVolP.checkEvent(volPlusEvent);
+    btnVolM.checkEvent(volMinusEvent);
+    btnBandP.checkEvent(bandPlusEvent);
+    btnBandM.checkEvent(bandMinusEvent);
     btnStep.checkEvent(stepEvent);
-    btnBand.checkEvent(bandEvent);
-
-    // Lógica del botón del encoder para entrar/salir de SETTINGS
-    if (digitalRead(ENCODER_BUTTON) == LOW) {
-        delay(200); // Debounce
-        g_settingsActive = !g_settingsActive;
-        
-        if (g_settingsActive) {
-            g_SettingSelected = 0;
-            showSettings();
-        } else {
-            showStatus(true);
-        }
-        
-        // Esperar a que suelte el botón
-        while(digitalRead(ENCODER_BUTTON) == LOW);
-    }
+    btnMode.checkEvent(modeEvent);
+    btnBw.checkEvent(bwEvent);
+    btnAgc.checkEvent(agcEvent);
+    btnTune.checkEvent(tuneEvent);
 
     // --- 3. ACTUALIZACIONES DE PANTALLA (Background) ---
     // Solo actualizamos el S-Meter si no estamos en el menú

@@ -1,6 +1,5 @@
 #pragma once
 #include <Arduino.h>
-#include <Tiny4kOLED_common.h> // Esto incluye las definiciones de tipos como DCfont sin crear el objeto oled
 
 // Declaramos que oled existe en otro sitio con su tipo real
 extern SSD1306PrintDevice oled;
@@ -50,12 +49,5 @@ class Button {
     }
 };
 
-// --- Funciones de Pantalla ---
-inline void oledPrint(const char* text, uint8_t x, uint8_t y, const DCfont* font = FONT6X8, bool invert = false) {
-    oled.setFont(font);
-    oled.setCursor(x, y);
-    if (invert) {
-        // Lógica de inversión si tu librería la soporta, o simplemente:
-    }
-    oled.print(text);
-}
+void resetEEPROM();
+void saveState();

@@ -94,3 +94,17 @@ void agcSetFunc()
     if (currentAtt == 0) g_si4735.setAutomaticGainControl(1, 0);
     else g_si4735.setAutomaticGainControl(0, currentAtt);
 }
+
+void doBand(int8_t v) {
+    bandSwitch(v > 0); // Si v es 1 sube, si es -1 baja
+}
+
+void doMode(int8_t v) {
+    // Aquí implementas el cambio de modo (AM/LSB/USB/CW/FM)
+    // Por ahora puedes dejarlo vacío para que compile
+}
+
+void doBandwidth(int8_t v) {
+    // Aquí implementas el cambio de ancho de banda
+    // Por ahora puedes dejarlo vacío para que compile
+}
