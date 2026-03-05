@@ -1,6 +1,8 @@
 #pragma once
 #include <Arduino.h>
 
+#define BFO_MAX 13000
+
 // --- 1. EVENTOS DE BOTONES (Mapeo ATS-20+) ---
 // Estas funciones reciben el evento (corto/largo) y el pin
 uint8_t volPlusEvent(uint8_t event, uint8_t pin);

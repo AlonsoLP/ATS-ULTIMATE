@@ -3,6 +3,17 @@
 #include <Tiny4kOLED_common.h> // Esto define los tipos y fuentes, pero NO crea el objeto 'oled'
 extern SSD1306PrintDevice oled; // Avisamos que la 'oled' real está en otro sitio
 
+// #define ENCODER_REVERSED
+#define CW_PITCH_OFFSET_HZ  500   // offset sidetone CW
+
+#define ATS20_PLUS          // Descomentar si es ATS-20+
+#ifdef ATS20_PLUS
+  #define BATTERY_PIN A1
+#else
+  #define BATTERY_PIN A2      // Requiere mod hardware en ATS-20 original
+#endif
+#define USE_BATTERY_INDICATOR  // Descomentar para activar indicador
+
 // --- Pines de Hardware (Ajustado para ATS-20+) ---
 #define RESET_PIN                   12
 #define ENCODER_PIN_A                2
@@ -41,10 +52,7 @@ struct Band {
     int8_t bandwidthIdx;
 };
 
-struct Bandwidth {
-    uint8_t idx;
-    const char* desc;
-};
+struct Bandwidth { uint8_t idx; const char* desc; };
 
 enum SettingType { Num, Switch };
 

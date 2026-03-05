@@ -1,6 +1,5 @@
 #include "InputActions.h"
 #include "State.h"
-#include "Config.h"
 #include "RadioCtrl.h"
 #include "DisplayUI.h"
 
@@ -12,17 +11,14 @@ inline void doSwitchLogic(int8_t& param, int8_t low, int8_t high, int8_t step)
     else if (param > high) param = low;
 }
 
-inline void doBandwidthLogic(int8_t& bwIndex, uint8_t upperLimit, uint8_t v)
-{
-    doSwitchLogic(bwIndex, 0, upperLimit, v);
-    g_bandList[g_bandIndex].bandwidthIdx = bwIndex;
-}
-
 // --- Eventos de Botones ---
 uint8_t volPlusEvent(uint8_t event, uint8_t pin) {
-    if (event == BUTTONEVENT_SHORTPRESS) doVolume(1);
-    else if (event == BUTTONEVENT_FIRSTLONGPRESS || event == BUTTONEVENT_LONGPRESS) {
-        doVolume(2); // Sube más rápido
+    if (event == BUTTONEVENT_SHORTPRESS) {
+        g_cmdVolume = !g_cmdVolume;  // toggle modo volumen
+        showVolume();
+    } else if (event == BUTTONEVENT_FIRSTLONGPRESS || event == BUTTONEVENT_LONGPRESS) {
+        g_cmdVolume = false;
+        doVolume(2);
     }
     return event;
 }
@@ -30,12 +26,14 @@ uint8_t volPlusEvent(uint8_t event, uint8_t pin) {
 uint8_t volMinusEvent(uint8_t event, uint8_t pin) {
     if (event == BUTTONEVENT_SHORTPRESS) {
         g_muteVolume = !g_muteVolume;
-        if (g_muteVolume) {
-            g_si4735.setVolume(0);
-        } else {
-            doVolume(0); // Restaura el volumen anterior
-        }
-        showStatus(true);
+	if (g_muteVolume) {
+	    g_savedVolume = g_si4735.getVolume(); // guardar antes de silenciar
+	    g_si4735.setVolume(0);
+    	    showStatus(true);
+	} else {
+	    g_si4735.setVolume(g_savedVolume);    // restaurar el guardado
+	    showVolume();
+	}
     }
     return event;
 }
@@ -48,10 +46,20 @@ uint8_t bandPlusEvent(uint8_t event, uint8_t pin) {
         showSettings();
     } else {
         if (event == BUTTONEVENT_SHORTPRESS) {
-            // Entrar en modo selección de banda con encoder (puedes implementarlo)
-            doBand(1);
+	    g_bandSelectMode = !g_bandSelectMode;
+	    if (g_bandSelectMode) {
+    		// Mostrar indicador de selección de banda
+    		showBandTag();
+	    } else {
+    		applyBandConfiguration();
+    		showStatus(true);
+	    }
         } else if (event == BUTTONEVENT_FIRSTLONGPRESS || event == BUTTONEVENT_LONGPRESS) {
-            doBand(1); // Scroll rápido
+	    if (g_bandIndex == SW_IDX) {
+    		doSWSubBand(1);  // En SW: navegar subbandas
+	    } else {
+    		doBand(1);       // En otras bandas: cambio de banda normal
+	    }
         }
     }
     return event;
@@ -82,17 +90,35 @@ uint8_t stepEvent(uint8_t event, uint8_t pin) {
 
 uint8_t agcEvent(uint8_t event, uint8_t pin) {
     if (event == BUTTONEVENT_SHORTPRESS) {
-        static bool screenOn = true;
-        screenOn = !screenOn;
-        if (screenOn) oled.on(); else oled.off();
+	g_screenOn = !g_screenOn;
+	if (g_screenOn) oled.on(); else oled.off();
+
     } else if (event == BUTTONEVENT_FIRSTLONGPRESS && isSSB()) {
-        // Lógica para SYNC (si tu librería/chip lo soporta en ese modo)
+	doSwitchLogic(g_Settings[SettingsIndex::Sync].param, 0, 1, 1);
+	if (g_Settings[SettingsIndex::Sync].param)
+    	    g_si4735.setSSBAutomaticVolumeControl(1);
+	else
+    	    g_si4735.setSSBAutomaticVolumeControl(0);
+	showStatus(false);
     }
     return event;
 }
 
 uint8_t modeEvent(uint8_t event, uint8_t pin) {
-    if (event == BUTTONEVENT_SHORTPRESS) doMode(1);
+    if (event == BUTTONEVENT_SHORTPRESS) {
+        if (g_bandIndex == FM_IDX) {
+#if USE_RDS
+            // En FM: activar/desactivar RDS
+            g_displayRDS = !g_displayRDS;
+            if (!g_displayRDS)
+                oledPrint("                ", 0, 6, DEFAULT_FONT);
+            else
+                showRDS();
+#endif
+        } else {
+            doMode(1);
+        }
+    }
     return event;
 }
 
@@ -109,10 +135,22 @@ uint8_t tuneEvent(uint8_t event, uint8_t pin) {
             g_isEditingSetting = !g_isEditingSetting; 
             showSettings();
         } else {
-            // Lógica de Escaneo o cambio rápido de Step en SSB
-            if (isSSB()) doStep(1);
-	    else if (g_Settings[SettingsIndex::ScanSwitch].param == 1) {
-                // Llamar a función de escaneo
+	    if (g_cmdVolume) {
+		g_cmdVolume = false;  // confirmar y salir del modo volumen
+		showStatus(false);
+		return event;
+	    }
+	    if (isSSB()) {
+		doStep(1);
+	    } else if (g_bandIndex == FM_IDX && g_displayRDS) {
+#if USE_RDS
+		// Ciclar entre los 3 modos RDS
+		g_rdsMode = (RDSActiveInfo)((g_rdsMode + 1) % 3);
+		showRDS();
+#endif
+	    } else if (g_Settings[SettingsIndex::ScanSwitch].param == 1) {
+		g_scanning = !g_scanning;
+		if (!g_scanning) showStatus(false); // Al parar, refrescar pantalla
             }
         }
     }
@@ -124,14 +162,43 @@ void doFrequencyTune(int8_t v) {
     int step = getSteps();
     if (v > 0) g_currentFrequency += step;
     else g_currentFrequency -= step;
-    
+    g_bandList[g_bandIndex].currentFreq = g_currentFrequency;
     g_si4735.setFrequency(g_currentFrequency);
     showFrequency(false);
+    if (g_bandIndex == SW_IDX) showModulation();
 }
 
 void doFrequencyTuneSSB(int8_t v) {
-    // Lógica para SSB (puedes copiar la de doFrequencyTune por ahora)
-    doFrequencyTune(v);
+    int step = getSteps(); // En SSB devuelve Hz para pasos finos
+
+    if (step < 1000) {
+        // Paso fino: mover BFO
+        g_currentBFO += (v > 0) ? step : -step;
+
+	// A 13000 (reserva 3383 Hz para calibración + CW)
+	if (g_currentBFO > BFO_MAX) {
+	    g_currentBFO -= BFO_MAX * 2;
+            g_currentFrequency++;
+            g_si4735.setFrequency(g_currentFrequency);
+            g_bandList[g_bandIndex].currentFreq = g_currentFrequency;
+	} else if (g_currentBFO < -BFO_MAX) {
+	    g_currentBFO += BFO_MAX * 2;
+            g_currentFrequency--;
+            g_si4735.setFrequency(g_currentFrequency);
+            g_bandList[g_bandIndex].currentFreq = g_currentFrequency;
+        }
+	updateBFO();
+    } else {
+        // Paso grueso: mover frecuencia portadora y resetear BFO
+        g_currentBFO = 0;
+	updateBFO();
+        int stepKHz = step / 1000;
+        if (v > 0) g_currentFrequency += stepKHz;
+        else       g_currentFrequency -= stepKHz;
+        g_si4735.setFrequency(g_currentFrequency);
+        g_bandList[g_bandIndex].currentFreq = g_currentFrequency;
+    }
+    showFrequency(false);
 }
 
 // --- Callbacks de la Estructura Settings ---
@@ -152,7 +219,7 @@ void doBrightness(int8_t v) {
 
 void doAvc(int8_t v) {
     doSwitchLogic(g_Settings[AutoVolControl].param, 0, 1, v);
-    // Lógica de hardware SI4735 para AVC si aplica
+    g_si4735.setAMFrontEndAgcControl(g_Settings[AutoVolControl].param ? 0 : 1, 0);
 }
 
 void doStep(int8_t v) {
@@ -163,15 +230,19 @@ void doStep(int8_t v) {
 }
 
 void doVolume(int8_t v) {
-    static int8_t currentVol = DEFAULT_VOLUME;
-    currentVol += v;
-    if (currentVol < 0) currentVol = 0;
+    int8_t currentVol = (int8_t)g_si4735.getVolume() + v;
+    if (currentVol < 0)  currentVol = 0;
     if (currentVol > 63) currentVol = 63;
-    g_si4735.setVolume(currentVol);
+    g_si4735.setVolume((uint8_t)currentVol);
     showVolume();
 }
 
-// Implementación de placeholders necesarios para evitar errores de linkado
+void doBFOCalibration(int8_t v) {
+    g_Settings[BFO].param += v;  // acumula offset
+    g_currentBFO = g_Settings[BFO].param;
+    g_si4735.setSSBBfo(g_currentBFO);
+}
+
 void doSSBAVC(int8_t v) { doSwitchLogic(g_Settings[SVC].param, 0, 1, v); }
 void doSync(int8_t v) { doSwitchLogic(g_Settings[Sync].param, 0, 1, v); }
 void doDeEmp(int8_t v) { doSwitchLogic(g_Settings[DeEmp].param, 0, 1, v); }
@@ -179,7 +250,6 @@ void doSWUnits(int8_t v) { doSwitchLogic(g_Settings[SWUnits].param, 0, 1, v); }
 void doSSBSoftMuteMode(int8_t v) { doSwitchLogic(g_Settings[SSM].param, 0, 1, v); }
 void doCutoffFilter(int8_t v) { doSwitchLogic(g_Settings[CutoffFilter].param, 0, 1, v); updateSSBCutoffFilter(); }
 void doCPUSpeed(int8_t v) { doSwitchLogic(g_Settings[CPUSpeed].param, 0, 1, v); }
-void doBFOCalibration(int8_t v) { /* Lógica de calibración */ }
 void doUnitsSwitch(int8_t v) { doSwitchLogic(g_Settings[UnitsSwitch].param, 0, 1, v); }
 void doScanSwitch(int8_t v) { doSwitchLogic(g_Settings[ScanSwitch].param, 0, 1, v); }
 void doCWSwitch(int8_t v) { doSwitchLogic(g_Settings[CWSwitch].param, 0, 1, v); }

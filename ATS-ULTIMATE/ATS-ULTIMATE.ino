@@ -23,16 +23,16 @@ Button btnTune(ENCODER_BUTTON);     // Pin 14 (A0)
 // --- Manejo del Encoder por Interrupción ---
 // Esta función se ejecuta cada vez que giras el encoder
 void readEncoder() {
-  static uint8_t old_AB = 0;
-  static int8_t enc_states[] = {0,-1,1,0,1,0,0,-1,-1,0,0,1,0,1,-1,0};
-  
-  old_AB <<= 2;                   // Guardar estado anterior
-  old_AB |= (digitalRead(ENCODER_PIN_A) << 1) | digitalRead(ENCODER_PIN_B);
-  int8_t diff = enc_states[(old_AB & 0x0f)];
-  
-  if (diff != 0) {
-    g_encoderCount = diff;
-  }
+    static uint8_t old_AB = 3;
+    static const int8_t enc_states[] = {0,-1,1,0,1,0,0,-1,-1,0,0,1,0,1,-1,0};
+    old_AB <<= 2;
+    old_AB |= ((digitalRead(ENCODER_PIN_A) << 1) | digitalRead(ENCODER_PIN_B)) & 0x03;
+    int8_t diff = enc_states[old_AB & 0x0f];
+#ifdef ENCODER_REVERSED
+    if (diff != 0) g_encoderCount -= diff;
+#else
+    if (diff != 0) g_encoderCount += diff;
+#endif
 }
 
 // --- Configuración Inicial ---
@@ -50,13 +50,13 @@ void setup() {
     // Lógica de Reset EEPROM (Botón pulsado al encender)
     if (digitalRead(ENCODER_BUTTON) == LOW) {
         oled.clear();
-        oledPrint("EEPROM RESET", 20, 2, DEFAULT_FONT);
+        oledPrint(F("EEPROM RESET"), 20, 2, DEFAULT_FONT);
         resetEEPROM();
         delay(2000);
     }
 
-    oledPrint("ATS-EX v1.0", 25, 0, DEFAULT_FONT);
-    oledPrint("SISTEMA LISTO", 20, 3, DEFAULT_FONT);
+    oledPrint(F("ATS-EX v1.0"), 25, 0, DEFAULT_FONT);
+    oledPrint(F("SISTEMA LISTO"), 20, 3, DEFAULT_FONT);
     
     // 2. Inicializar Radio (Chip SI4735)
     // Usamos el PIN de RESET definido en Config.h
@@ -75,7 +75,13 @@ void setup() {
     // 5. Cargar Banda por Defecto (MW)
     g_bandIndex = 1; 
     applyBandConfiguration();
-    
+
+    // 6. Carga desde EEPROM
+    loadState();
+
+    applyBandConfiguration();
+    g_si4735.setVolume(g_savedVolume);
+
     delay(1000);
     oled.clear();
     showStatus(true);
@@ -97,10 +103,26 @@ void loop() {
 
     // Ahora usamos nuestra copia local 'rotacion' en lugar de la variable global
     if (rotacion != 0) {
-        if (g_settingsActive) {
-            // Si estamos dentro del menú de ajustes
-            g_Settings[g_SettingSelected].manipulateCallback(rotacion);
-            showSettings();
+	if (g_bandSelectMode) {
+	    doBand(rotacion > 0 ? 1 : -1);
+	    showBandTag();
+	} else if (g_settingsActive) {
+	    if (g_isEditingSetting) {
+    		// Modo edición: cambia el valor del setting seleccionado
+    		if (g_Settings[g_SettingSelected].manipulateCallback != NULL) {
+        	    g_Settings[g_SettingSelected].manipulateCallback(rotacion);
+    		}
+	    } else {
+    		// Modo navegación: mueve el cursor entre settings
+    		g_SettingSelected += rotacion;
+    		// Limitar al rango de la página actual
+    		int8_t pageStart = g_SettingsPage * 3;
+    		int8_t pageEnd   = pageStart + 2;
+    		if (pageEnd >= SETTINGS_MAX) pageEnd = SETTINGS_MAX - 1;
+    		if (g_SettingSelected < pageStart) g_SettingSelected = pageEnd;
+    		if (g_SettingSelected > pageEnd)   g_SettingSelected = pageStart;
+	    }
+	    showSettings();
         } 
         else if (g_cmdVolume) {
             // Si el modo volumen está activo (por pulsación de botón)
@@ -134,14 +156,18 @@ void loop() {
     if (!g_settingsActive) {
         static uint32_t lastUpdate = 0;
         if (millis() - lastUpdate > 250) {
-            showSMeter();
-            
-            #if USE_RDS
-            if (g_currentMode == FM) {
+	    if (g_showSmeterBar) showSMeter();
+	    else oledPrint(F("                "), 0, 7, DEFAULT_FONT); // limpiar fila si está desactivado
+
+	    if (g_scanning && (g_currentMode == FM || g_currentMode == AM)) {
+		doScan();
+	    }
+#if USE_RDS
+	    if (g_currentMode == FM && g_displayRDS) {
                 g_si4735.getRdsStatus();
                 showRDS();
             }
-            #endif
+#endif
             lastUpdate = millis();
         }
     }
@@ -149,7 +175,7 @@ void loop() {
     // --- 4. GESTIÓN DE ENERGÍA Y GUARDADO ---
     // Si han pasado 10 segundos (STORE_TIME) desde el último cambio, podrías guardar en EEPROM
     if (g_storeTime > 0 && (millis() - g_storeTime > STORE_TIME)) {
-        // saveSettingsToEeprom(); // Implementar si deseas persistencia
+	saveState();
         g_storeTime = 0;
     }
 }

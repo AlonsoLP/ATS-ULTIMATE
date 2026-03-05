@@ -1,22 +1,20 @@
 #include "State.h"
 #include "InputActions.h"
 
+#if USE_RDS
+RDSActiveInfo g_rdsMode = StationName;
+#endif
+
 // --- Variables de Estado Globales ---
 long g_storeTime = 0; 
-bool g_voltagePinConnnected = false;
 bool g_ssbLoaded = false;
 bool g_fmStereo = true;
+bool g_cmdVolume = false;
 
-bool g_cmdVolume = false, g_cmdStep = false, g_cmdBw = false, g_cmdBand = false;
-bool g_settingsActive = false, g_sMeterOn = false, g_muteVolume = false;
-bool g_displayRDS = false, g_processFreqChange = false;
-uint32_t g_lastFreqChange = 0;
-
-// Definición única de la línea vacía (16 espacios + fin de cadena = 17)
-char _literal_EmptyLine[17] = "                "; 
+bool g_settingsActive = false, g_muteVolume = false;
+bool g_displayRDS = false;
 
 SI4735 g_si4735;
-Rotary g_encoder = Rotary(ENCODER_PIN_A, ENCODER_PIN_B);
 
 int g_currentBFO = 0;
 int8_t g_currentMode = AM; // AM, LSB, USB, CW, FM
@@ -39,20 +37,26 @@ SettingsItem g_Settings[] = {
     {"RDS ", 0, 0, 1,  Num,        NULL}, // Ajustado dinámicamente
 #endif
     {"BFO",  0, 0, 0,  Num,        doBFOCalibration},
-    {"UNIT", 0, 0, 1,  Switch,     doUnitsSwitch},
+    {"UKHZ", 0, 0, 1,  Switch,     doUnitsSwitch},
     {"SCAN", 0, 0, 1,  Switch,     doScanSwitch},
     {"CW  ", 0, 0, 1,  Switch,     doCWSwitch}
 };
 
-const uint8_t g_SettingsMaxPages = (sizeof(g_Settings) / sizeof(SettingsItem) + 3) / 4;
+const uint8_t g_SettingsMaxPages = (SETTINGS_MAX + 2) / 3;
 int8_t g_SettingSelected = 0;
 int8_t g_SettingsPage = 0;
 bool g_SettingEditing = false;
 
 // --- Configuración de Anchos de Banda ---
 int8_t g_bwIndexSSB = 4;
+static const char bw_ssb0[] PROGMEM = "1.2";
+static const char bw_ssb1[] PROGMEM = "2.3";
+static const char bw_ssb2[] PROGMEM = "3.0";
+static const char bw_ssb3[] PROGMEM = "4.0";
+static const char bw_ssb4[] PROGMEM = "0.5";
+static const char bw_ssb5[] PROGMEM = "1.0";
 Bandwidth g_bandwidthSSB[] = {
-    {4, "1.2"}, {5, "2.3"}, {6, "3.0"}, {7, "4.0"}, {0, "0.5"}, {1, "1.0"}
+    {4, bw_ssb0}, {5, bw_ssb1}, {6, bw_ssb2}, {7, bw_ssb3}, {0, bw_ssb4}, {1, bw_ssb5}
 };
 const uint8_t g_bwSSBMaxIdx = (sizeof(g_bandwidthSSB) / sizeof(Bandwidth)) - 1;
 
@@ -66,9 +70,8 @@ int8_t g_bwIndexFM = 0;
 char* g_bandwidthFM[] = { "AUTO", "110k", " 84k", " 60k", " 40k" };
 
 // --- Pasos de Frecuencia ---
-int g_tabStep[] = { 1, 5, 9, 10, 50, 100, 1000, 10, 25, 50, 100, 500 };
+const int g_tabStep[] PROGMEM = { 1, 5, 9, 10, 50, 100, 1000, 10, 25, 50, 100, 500 };
 uint8_t g_amTotalSteps = 7;
-uint8_t g_amTotalStepsSSB = 4;
 uint8_t g_ssbTotalSteps = 5;
 volatile int8_t g_stepIndex = 3;
 
@@ -82,19 +85,28 @@ Band g_bandList[] = {
     { 520, 1710, 1476, 3, 4 },
     { SW_LIMIT_LOW, SW_LIMIT_HIGH, SW_LIMIT_LOW, 0, 4 },
     { 8750, 10800, 9580, 1, 0 }, // FM
+    { 1800,  2000,  1850, 0, 4 },  // 160m Ham
+    { 3500,  4000,  3700, 0, 4 },  // 80m Ham
+    { 7000,  7300,  7100, 0, 4 },  // 40m Ham
+    { 14000, 14350, 14200, 0, 4 }, // 20m Ham
+    { 21000, 21450, 21200, 0, 4 }, // 15m Ham
+    { 28000, 29700, 28400, 0, 4 }, // 10m Ham
 };
 
 const uint8_t g_lastBand = (sizeof(g_bandList) / sizeof(Band)) - 1;
 int8_t g_bandIndex = 1; // Empezar en MW por defecto
 
-uint16_t SWSubBands[] = {
-    SW_LIMIT_LOW, 3500, 4500, 5500, 6500, 7500, 9000, 11000, 13000, 14500, 16000, 18000, 21000, 24000, 26000, CB_LIMIT_LOW
-};
+const uint16_t SWSubBands[] PROGMEM = { SW_LIMIT_LOW, 3500, 4500, 5500, 6500, 7500, 9000, 11000, 13000, 14500, 16000, 18000, 21000, 24000, 26000, CB_LIMIT_LOW };
+
 const uint8_t g_SWSubBandCount = sizeof(SWSubBands) / sizeof(uint16_t);
 
 volatile int8_t g_encoderCount = 0;
 uint16_t g_currentFrequency = 0;
-uint16_t g_previousFrequency = 0;
+uint8_t g_savedVolume = DEFAULT_VOLUME;
 
 bool g_showSmeterBar = true;
 bool g_isEditingSetting = false;
+
+bool g_screenOn = true;
+bool g_scanning = false;
+bool g_bandSelectMode = false;

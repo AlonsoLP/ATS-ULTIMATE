@@ -1,7 +1,6 @@
 #pragma once
 #include <Arduino.h>
 #include <SI4735.h>
-#include "Rotary.h"
 #include "Config.h"
 #include "Utils.h"
 
@@ -26,25 +25,20 @@ enum Modulations : uint8_t { AM, LSB, USB, CW, FM };
 
 #if USE_RDS
 enum RDSActiveInfo : uint8_t { StationName, StationInfo, ProgramInfo };
+extern RDSActiveInfo g_rdsMode;
 #endif
 
 // --- Declaraciones Externas (Variables en State.cpp) ---
 extern long g_storeTime;
-extern bool g_voltagePinConnnected;
 extern bool g_ssbLoaded;
 extern bool g_fmStereo;
-extern bool g_cmdVolume, g_cmdStep, g_cmdBw, g_cmdBand;
-extern bool g_settingsActive, g_sMeterOn, g_muteVolume;
-extern bool g_displayRDS, g_processFreqChange;
-extern uint32_t g_lastFreqChange;
+extern bool g_cmdVolume;
+extern bool g_settingsActive, g_muteVolume;
+extern bool g_displayRDS;
 extern bool g_showSmeterBar;
 extern bool g_isEditingSetting;
 
-// Línea de borrado unificada
-extern char _literal_EmptyLine[17];
-
 extern SI4735 g_si4735;
-extern Rotary g_encoder;
 extern int g_currentBFO;
 extern int8_t g_currentMode;
 
@@ -68,9 +62,8 @@ extern int8_t g_bwIndexFM;
 extern char* g_bandwidthFM[];
 
 // Pasos de frecuencia
-extern int g_tabStep[];
+extern const int g_tabStep[] PROGMEM;  // o mejor: mover a Config.h como constante
 extern uint8_t g_amTotalSteps;
-extern uint8_t g_amTotalStepsSSB;
 extern uint8_t g_ssbTotalSteps;
 extern volatile int8_t g_stepIndex;
 
@@ -80,11 +73,17 @@ extern const int8_t g_lastStepFM;
 
 // Bandas
 extern Band g_bandList[];
-extern uint16_t SWSubBands[];
+extern const uint16_t SWSubBands[] PROGMEM;
 extern const uint8_t g_SWSubBandCount;
 extern const uint8_t g_lastBand;
 extern int8_t g_bandIndex;
 
 extern volatile int8_t g_encoderCount;
 extern uint16_t g_currentFrequency;
-extern uint16_t g_previousFrequency;
+extern uint8_t g_savedVolume;
+
+extern bool g_screenOn;
+extern bool g_scanning;
+extern bool g_bandSelectMode;
+
+inline bool isSSB() { return g_currentMode > AM && g_currentMode < FM; }
