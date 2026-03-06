@@ -28,47 +28,46 @@
 #define EEPROM_SETTINGS  10
 #define EEPROM_VALID_KEY 0xA5
 
-void saveState() {
-    EEPROM.update(EEPROM_MAGIC,  EEPROM_VALID_KEY);
-    EEPROM.update(EEPROM_VERSION, EEPROM_FW_VERSION);
-    EEPROM.update(EEPROM_BAND,   (uint8_t)g_bandIndex);
-    EEPROM.update(EEPROM_MODE,   (uint8_t)g_currentMode);
-    EEPROM.update(EEPROM_STEP,   (uint8_t)g_stepIndex);
-    EEPROM.update(EEPROM_BWSSB,  (uint8_t)g_bwIndexSSB);
-    EEPROM.update(EEPROM_BWAM,   (uint8_t)g_bwIndexAM);
-    EEPROM.update(EEPROM_BWFM,   (uint8_t)g_bwIndexFM);
-    EEPROM.update(EEPROM_VOL,    g_si4735.getVolume());
-    EEPROM.update(EEPROM_FREQ_L, (uint8_t)(g_currentFrequency & 0xFF));
-    EEPROM.update(EEPROM_FREQ_H, (uint8_t)(g_currentFrequency >> 8));
-    for (uint8_t i = 0; i < SETTINGS_MAX; i++) {
-        EEPROM.update(EEPROM_SETTINGS + i, (uint8_t)g_Settings[i].param);
-    }
+void saveState()
+{
+    EepromData data;
+    data.magic       = EEPROM_VALID_KEY;
+    data.bandIndex   = (uint8_t)g_bandIndex;
+    data.currentMode = (uint8_t)g_currentMode;
+    data.stepIndex   = (uint8_t)g_stepIndex;
+    data.bwIndexSSB  = (uint8_t)g_bwIndexSSB;
+    data.bwIndexAM   = (uint8_t)g_bwIndexAM;
+    data.bwIndexFM   = (uint8_t)g_bwIndexFM;
+    data.volume      = g_si4735.getVolume();
+    data.currentFreq = g_currentFrequency;
+    for (uint8_t i = 0; i < SETTINGS_MAX; i++)
+        data.settings[i] = g_Settings[i].param;
+
+    EEPROM.put(EEPROM_ADDR, data);
 }
 
-void resetEEPROM() {
-    EEPROM.update(EEPROM_MAGIC, 0x00); // Invalidar magic byte
-}
+void loadState()
+{
+    EepromData data;
+    EEPROM.get(EEPROM_ADDR, data);
+    if (data.magic != EEPROM_VALID_KEY) return;
 
-void loadState() {
-    if (EEPROM.read(EEPROM_MAGIC)   != EEPROM_VALID_KEY ||
-        EEPROM.read(EEPROM_VERSION) != EEPROM_FW_VERSION) {
-        // Estructura EEPROM incompatible con este firmware → reset seguro
-        resetEEPROM();
-        EEPROM.update(EEPROM_VERSION, EEPROM_FW_VERSION);
-        return; // salir: se usarán valores por defecto de State.cpp
-    }
-
-    g_bandIndex      = EEPROM.read(EEPROM_BAND);
-    g_currentMode    = EEPROM.read(EEPROM_MODE);
-    g_stepIndex      = EEPROM.read(EEPROM_STEP);
-    g_bwIndexSSB     = EEPROM.read(EEPROM_BWSSB);
-    g_bwIndexAM      = EEPROM.read(EEPROM_BWAM);
-    g_bwIndexFM      = EEPROM.read(EEPROM_BWFM);
-    g_savedVolume    = EEPROM.read(EEPROM_VOL);
-    g_currentFrequency = EEPROM.read(EEPROM_FREQ_L) |
-                         ((uint16_t)EEPROM.read(EEPROM_FREQ_H) << 8);
-    for (uint8_t i = 0; i < SETTINGS_MAX; i++) {
-        g_Settings[i].param = (int8_t)EEPROM.read(EEPROM_SETTINGS + i);
-    }
+    g_bandIndex      = data.bandIndex;
+    g_currentMode    = data.currentMode;
+    g_stepIndex      = data.stepIndex;
+    g_bwIndexSSB     = data.bwIndexSSB;
+    g_bwIndexAM      = data.bwIndexAM;
+    g_bwIndexFM      = data.bwIndexFM;
+    g_currentFrequency = data.currentFreq;
     g_bandList[g_bandIndex].currentFreq = g_currentFrequency;
+    for (uint8_t i = 0; i < SETTINGS_MAX; i++)
+        g_Settings[i].param = data.settings[i];
+
+    g_si4735.setVolume(data.volume);
+    g_savedVolume = data.volume;
+}
+
+void resetEEPROM()
+{
+    EEPROM.update(EEPROM_ADDR, 0x00);  // solo invalida el magic byte
 }

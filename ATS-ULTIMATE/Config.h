@@ -79,6 +79,9 @@ struct SettingsItem {
 // --- Configuración de Funciones ---
 #define USE_RDS                     1
 
-// --- Notas del Sistema Internacional (SI) ---
-// Frecuencias en kHz (AM/SW) y MHz (FM)
-// Temperaturas (si se añaden) en °C
+#define BW_SSB_MAX       5   // índice máximo g_bandwidthSSB
+#define BW_AM_MAX        6   // índice máximo g_bandwidthAM
+#define LAST_BAND        3   // índice último g_bandList
+#define SW_SUBBAND_COUNT 16  // elementos SWSubBands
+#define FM_TOTAL_STEPS   3
+#define FM_LAST_STEP     2

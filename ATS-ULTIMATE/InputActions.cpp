@@ -3,6 +3,17 @@
 #include "RadioCtrl.h"
 #include "DisplayUI.h"
 
+// --- Instancias de botones ---
+static Button s_btnVolP(VOLUME_UP_BUTTON);
+static Button s_btnVolM(VOLUME_DN_BUTTON);
+static Button s_btnBandP(BAND_UP_BUTTON);
+static Button s_btnBandM(BAND_DN_BUTTON);
+static Button s_btnStep(STEP_BUTTON);
+static Button s_btnMode(MODE_SWITCH);
+static Button s_btnBw(BANDWIDTH_BUTTON);
+static Button s_btnAgc(AGC_BUTTON);
+static Button s_btnTune(ENCODER_BUTTON);
+
 // --- Helper interno para lógica de conmutación ---
 inline void doSwitchLogic(int8_t& param, int8_t low, int8_t high, int8_t step)
 {
@@ -23,7 +34,8 @@ uint8_t volPlusEvent(uint8_t event, uint8_t pin) {
     return event;
 }
 
-uint8_t volMinusEvent(uint8_t event, uint8_t pin) {
+uint8_t volMinusEvent(uint8_t event, uint8_t pin)
+{
     if (event == BUTTONEVENT_SHORTPRESS) {
         g_muteVolume = !g_muteVolume;
 	if (g_muteVolume) {
@@ -38,7 +50,8 @@ uint8_t volMinusEvent(uint8_t event, uint8_t pin) {
     return event;
 }
 
-uint8_t bandPlusEvent(uint8_t event, uint8_t pin) {
+uint8_t bandPlusEvent(uint8_t event, uint8_t pin)
+{
     if (g_settingsActive) {
         // Cambiar de página en ajustes
         g_SettingsPage++;
@@ -65,7 +78,8 @@ uint8_t bandPlusEvent(uint8_t event, uint8_t pin) {
     return event;
 }
 
-uint8_t bandMinusEvent(uint8_t event, uint8_t pin) {
+uint8_t bandMinusEvent(uint8_t event, uint8_t pin)
+{
     if (event == BUTTONEVENT_SHORTPRESS) {
         g_settingsActive = !g_settingsActive;
         if (g_settingsActive) showSettings();
@@ -79,7 +93,8 @@ uint8_t bandMinusEvent(uint8_t event, uint8_t pin) {
     return event;
 }
 
-uint8_t stepEvent(uint8_t event, uint8_t pin) {
+uint8_t stepEvent(uint8_t event, uint8_t pin)
+{
     if (event == BUTTONEVENT_SHORTPRESS) doStep(1);
     else if (event == BUTTONEVENT_FIRSTLONGPRESS) {
         g_showSmeterBar = !g_showSmeterBar; // Debes declarar esta variable en State.h
@@ -88,23 +103,21 @@ uint8_t stepEvent(uint8_t event, uint8_t pin) {
     return event;
 }
 
-uint8_t agcEvent(uint8_t event, uint8_t pin) {
+uint8_t agcEvent(uint8_t event, uint8_t pin)
+{
     if (event == BUTTONEVENT_SHORTPRESS) {
 	g_screenOn = !g_screenOn;
 	if (g_screenOn) oled.on(); else oled.off();
 
     } else if (event == BUTTONEVENT_FIRSTLONGPRESS && isSSB()) {
-	doSwitchLogic(g_Settings[SettingsIndex::Sync].param, 0, 1, 1);
-	if (g_Settings[SettingsIndex::Sync].param)
-    	    g_si4735.setSSBAutomaticVolumeControl(1);
-	else
-    	    g_si4735.setSSBAutomaticVolumeControl(0);
+	doSync(1);
 	showStatus(false);
     }
     return event;
 }
 
-uint8_t modeEvent(uint8_t event, uint8_t pin) {
+uint8_t modeEvent(uint8_t event, uint8_t pin)
+{
     if (event == BUTTONEVENT_SHORTPRESS) {
         if (g_bandIndex == FM_IDX) {
 #if USE_RDS
@@ -122,13 +135,15 @@ uint8_t modeEvent(uint8_t event, uint8_t pin) {
     return event;
 }
 
-uint8_t bwEvent(uint8_t event, uint8_t pin) {
+uint8_t bwEvent(uint8_t event, uint8_t pin)
+{
     if (event == BUTTONEVENT_SHORTPRESS) doBandwidth(1);
     return event;
 }
 
 
-uint8_t tuneEvent(uint8_t event, uint8_t pin) {
+uint8_t tuneEvent(uint8_t event, uint8_t pin)
+{
     if (event == BUTTONEVENT_SHORTPRESS) {
         if (g_settingsActive) {
             // Si estamos en ajustes, clic para seleccionar/confirmar
@@ -158,7 +173,8 @@ uint8_t tuneEvent(uint8_t event, uint8_t pin) {
 }
 
 // --- Sintonización de Frecuencia ---
-void doFrequencyTune(int8_t v) {
+void doFrequencyTune(int8_t v)
+{
     int step = getSteps();
     if (v > 0) g_currentFrequency += step;
     else g_currentFrequency -= step;
@@ -168,68 +184,69 @@ void doFrequencyTune(int8_t v) {
     if (g_bandIndex == SW_IDX) showModulation();
 }
 
-void doFrequencyTuneSSB(int8_t v) {
-    int step = getSteps(); // En SSB devuelve Hz para pasos finos
+void doFrequencyTuneSSB(int8_t v)
+{
+    int step = getSteps();
 
     if (step < 1000) {
-        // Paso fino: mover BFO
         g_currentBFO += (v > 0) ? step : -step;
 
-	// A 13000 (reserva 3383 Hz para calibración + CW)
-	if (g_currentBFO > BFO_MAX) {
-	    g_currentBFO -= BFO_MAX * 2;
-            g_currentFrequency++;
-            g_si4735.setFrequency(g_currentFrequency);
+        // Helper lambda-style para rollover de portadora
+        auto carrierShift = [](int8_t dir) {
+            g_currentFrequency += dir;
             g_bandList[g_bandIndex].currentFreq = g_currentFrequency;
-	} else if (g_currentBFO < -BFO_MAX) {
-	    g_currentBFO += BFO_MAX * 2;
-            g_currentFrequency--;
             g_si4735.setFrequency(g_currentFrequency);
-            g_bandList[g_bandIndex].currentFreq = g_currentFrequency;
-        }
-	updateBFO();
+        };
+
+        if      (g_currentBFO >  BFO_MAX) { g_currentBFO -= BFO_MAX * 2; carrierShift(+1); }
+        else if (g_currentBFO < -BFO_MAX) { g_currentBFO += BFO_MAX * 2; carrierShift(-1); }
+
+        updateBFO();
     } else {
-        // Paso grueso: mover frecuencia portadora y resetear BFO
         g_currentBFO = 0;
-	updateBFO();
+        updateBFO();
         int stepKHz = step / 1000;
-        if (v > 0) g_currentFrequency += stepKHz;
-        else       g_currentFrequency -= stepKHz;
-        g_si4735.setFrequency(g_currentFrequency);
+        g_currentFrequency += (v > 0) ? stepKHz : -stepKHz;
         g_bandList[g_bandIndex].currentFreq = g_currentFrequency;
+        g_si4735.setFrequency(g_currentFrequency);
+        showFrequency(false);
     }
-    showFrequency(false);
 }
 
-// --- Callbacks de la Estructura Settings ---
-void doAttenuation(int8_t v) {
+void doAttenuation(int8_t v)
+{
     doSwitchLogic(g_Settings[ATT].param, 0, 37, v);
     g_si4735.setAutomaticGainControl(0, g_Settings[ATT].param);
 }
 
-void doSoftMute(int8_t v) {
+void doSoftMute(int8_t v)
+{
     doSwitchLogic(g_Settings[SoftMute].param, 0, 32, v);
     g_si4735.setAmSoftMuteMaxAttenuation(g_Settings[SoftMute].param);
 }
 
-void doBrightness(int8_t v) {
+void doBrightness(int8_t v)
+{
     doSwitchLogic(g_Settings[Brightness].param, 1, 15, v);
     oled.setContrast(g_Settings[Brightness].param * 15);
 }
 
-void doAvc(int8_t v) {
+void doAvc(int8_t v)
+{
     doSwitchLogic(g_Settings[AutoVolControl].param, 0, 1, v);
     g_si4735.setAMFrontEndAgcControl(g_Settings[AutoVolControl].param ? 0 : 1, 0);
 }
 
-void doStep(int8_t v) {
+void doStep(int8_t v)
+{
     int8_t tempStep = g_stepIndex; // Copiamos el valor volatile a uno normal
     int8_t maxStep = getLastStep();
     doSwitchLogic(tempStep, 0, maxStep, v);
     g_stepIndex = tempStep; // Devolvemos el valor procesado
 }
 
-void doVolume(int8_t v) {
+void doVolume(int8_t v)
+{
     int8_t currentVol = (int8_t)g_si4735.getVolume() + v;
     if (currentVol < 0)  currentVol = 0;
     if (currentVol > 63) currentVol = 63;
@@ -237,19 +254,130 @@ void doVolume(int8_t v) {
     showVolume();
 }
 
-void doBFOCalibration(int8_t v) {
+void doBFOCalibration(int8_t v)
+{
     g_Settings[BFO].param += v;  // acumula offset
     g_currentBFO = g_Settings[BFO].param;
     g_si4735.setSSBBfo(g_currentBFO);
 }
 
-void doSSBAVC(int8_t v) { doSwitchLogic(g_Settings[SVC].param, 0, 1, v); }
-void doSync(int8_t v) { doSwitchLogic(g_Settings[Sync].param, 0, 1, v); }
-void doDeEmp(int8_t v) { doSwitchLogic(g_Settings[DeEmp].param, 0, 1, v); }
-void doSWUnits(int8_t v) { doSwitchLogic(g_Settings[SWUnits].param, 0, 1, v); }
-void doSSBSoftMuteMode(int8_t v) { doSwitchLogic(g_Settings[SSM].param, 0, 1, v); }
-void doCutoffFilter(int8_t v) { doSwitchLogic(g_Settings[CutoffFilter].param, 0, 1, v); updateSSBCutoffFilter(); }
-void doCPUSpeed(int8_t v) { doSwitchLogic(g_Settings[CPUSpeed].param, 0, 1, v); }
-void doUnitsSwitch(int8_t v) { doSwitchLogic(g_Settings[UnitsSwitch].param, 0, 1, v); }
-void doScanSwitch(int8_t v) { doSwitchLogic(g_Settings[ScanSwitch].param, 0, 1, v); }
-void doCWSwitch(int8_t v) { doSwitchLogic(g_Settings[CWSwitch].param, 0, 1, v); }
+void doDeEmp(int8_t v)
+{
+    doSwitchLogic(g_Settings[DeEmp].param, 0, 1, v);
+    if (g_bandIndex == FM_IDX)
+        g_si4735.setFMDeEmphasis(g_Settings[DeEmp].param ? 1 : 2);
+    // SI4735: 1=50µs (Europa), 2=75µs (América)
+}
+
+void doSSBSoftMuteMode(int8_t v)
+{
+    doSwitchLogic(g_Settings[SSM].param, 0, 1, v);
+    if (isSSB())
+        g_si4735.setSSBSoftMute(g_Settings[SSM].param);
+}
+
+void doCPUSpeed(int8_t v)
+{
+    doSwitchLogic(g_Settings[CPUSpeed].param, 0, 1, v);
+    if (g_Settings[CPUSpeed].param == 0) {
+        // 16 MHz — modo normal
+        CLKPR = (1 << CLKPCE);   // habilitar cambio
+        CLKPR = 0x00;             // divisor /1 → 16 MHz
+        Wire.setClock(400000);    // I2C Fast Mode
+    } else {
+        // 8 MHz — modo ahorro
+        Wire.setClock(100000);    // bajar I2C ANTES de bajar CPU
+        CLKPR = (1 << CLKPCE);
+        CLKPR = 0x01;             // divisor /2 → 8 MHz
+    }
+}
+
+void doCWSwitch(int8_t v)
+{
+    doSwitchLogic(g_Settings[CWSwitch].param, 0, 1, v);
+    // Si se desactiva CW estando en CW, doMode se encarga de salir
+    if (g_currentMode == CW && g_Settings[CWSwitch].param == 0)
+        doMode(1);
+}
+
+void doSWUnits(int8_t v)
+{
+    doSwitchLogic(g_Settings[SWUnits].param, 0, 1, v);
+    showStep();  // refrescar inmediatamente
+}
+
+void doUnitsSwitch(int8_t v)
+{
+    doSwitchLogic(g_Settings[UnitsSwitch].param, 0, 1, v);
+    showFrequency(false);  // refrescar con nueva unidad
+}
+
+void doSync(int8_t v)
+{
+    doSwitchLogic(g_Settings[Sync].param, 0, 1, v);
+    if (isSSB())
+        g_si4735.setSSBAutomaticVolumeControl(g_Settings[Sync].param);
+}
+
+void doCutoffFilter(int8_t v)
+{
+    doSwitchLogic(g_Settings[CutoffFilter].param, 0, 1, v);
+    updateSSBCutoffFilter();
+}
+
+void doSSBAVC(int8_t v)
+{
+    doSwitchLogic(g_Settings[SVC].param, 0, 1, v);
+    if (isSSB())
+        g_si4735.setSSBAvcDivider(g_Settings[SVC].param ? 3 : 0);
+        // 0 = AVC desactivado, 3 = divisor estándar (valor recomendado por pu2clr)
+}
+
+void doScanSwitch(int8_t v)
+{
+    doSwitchLogic(g_Settings[ScanSwitch].param, 0, 1, v);
+}
+
+// Tabla de estados del encoder en PROGMEM — 16 bytes Flash, 0 RAM
+static const int8_t s_encStates[] PROGMEM = { 0,-1,1,0, 1,0,0,-1, -1,0,0,1, 0,1,-1,0 };
+
+void readEncoder()
+{
+    static uint8_t old_AB = 3;
+
+    // Lectura directa de registro — 2 instrucciones vs ~20 de digitalRead()
+    // PIND contiene los pines 0-7, ENCODER_PIN_A=2 y ENCODER_PIN_B=3
+    uint8_t ab = (PIND >> 2) & 0x03;  // bits 2 y 3 → posición 1 y 0
+
+    old_AB = ((old_AB << 2) | ab) & 0x0F;
+    int8_t diff = (int8_t)pgm_read_byte(&s_encStates[old_AB]);
+
+    if (diff != 0) {
+#ifdef ENCODER_REVERSED
+        g_encoderCount -= diff;
+#else
+        g_encoderCount += diff;
+#endif
+    }
+}
+
+void setupEncoder()
+{
+    pinMode(ENCODER_PIN_A, INPUT_PULLUP);
+    pinMode(ENCODER_PIN_B, INPUT_PULLUP);
+    attachInterrupt(digitalPinToInterrupt(ENCODER_PIN_A), readEncoder, CHANGE);
+    attachInterrupt(digitalPinToInterrupt(ENCODER_PIN_B), readEncoder, CHANGE);
+}
+
+void processButtons()
+{
+    s_btnVolP.checkEvent(volPlusEvent);
+    s_btnVolM.checkEvent(volMinusEvent);
+    s_btnBandP.checkEvent(bandPlusEvent);
+    s_btnBandM.checkEvent(bandMinusEvent);
+    s_btnStep.checkEvent(stepEvent);
+    s_btnMode.checkEvent(modeEvent);
+    s_btnBw.checkEvent(bwEvent);
+    s_btnAgc.checkEvent(agcEvent);
+    s_btnTune.checkEvent(tuneEvent);
+}

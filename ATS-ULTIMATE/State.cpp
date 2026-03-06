@@ -42,10 +42,8 @@ SettingsItem g_Settings[] = {
     {"CW  ", 0, 0, 1,  Switch,     doCWSwitch}
 };
 
-const uint8_t g_SettingsMaxPages = (SETTINGS_MAX + 2) / 3;
 int8_t g_SettingSelected = 0;
 int8_t g_SettingsPage = 0;
-bool g_SettingEditing = false;
 
 // --- Configuración de Anchos de Banda ---
 int8_t g_bwIndexSSB = 4;
@@ -58,16 +56,14 @@ static const char bw_ssb5[] PROGMEM = "1.0";
 Bandwidth g_bandwidthSSB[] = {
     {4, bw_ssb0}, {5, bw_ssb1}, {6, bw_ssb2}, {7, bw_ssb3}, {0, bw_ssb4}, {1, bw_ssb5}
 };
-const uint8_t g_bwSSBMaxIdx = (sizeof(g_bandwidthSSB) / sizeof(Bandwidth)) - 1;
 
 int8_t g_bwIndexAM = 4;
 Bandwidth g_bandwidthAM[] = {
     {4, "1.0"}, {5, "1.8"}, {6, "2.0"}, {7, "2.5"}, {0, "3.0"}, {1, "4.0"}, {2, "6.0"}
 };
-const uint8_t g_maxFilterAM = (sizeof(g_bandwidthAM) / sizeof(Bandwidth)) - 1;
 
 int8_t g_bwIndexFM = 0;
-char* g_bandwidthFM[] = { "AUTO", "110k", " 84k", " 60k", " 40k" };
+const char* g_bandwidthFM[] = { "AUTO", "110k", " 84k", " 60k", " 40k" };
 
 // --- Pasos de Frecuencia ---
 const int g_tabStep[] PROGMEM = { 1, 5, 9, 10, 50, 100, 1000, 10, 25, 50, 100, 500 };
@@ -76,8 +72,7 @@ uint8_t g_ssbTotalSteps = 5;
 volatile int8_t g_stepIndex = 3;
 
 int8_t g_tabStepFM[] = { 5, 10, 100 };
-int8_t g_FMStepIndex = 1;
-const int8_t g_lastStepFM = (sizeof(g_tabStepFM) / sizeof(int8_t)) - 1;
+uint8_t g_FMStepIndex = 1;
 
 // --- Lista de Bandas ---
 Band g_bandList[] = {
@@ -93,12 +88,9 @@ Band g_bandList[] = {
     { 28000, 29700, 28400, 0, 4 }, // 10m Ham
 };
 
-const uint8_t g_lastBand = (sizeof(g_bandList) / sizeof(Band)) - 1;
 int8_t g_bandIndex = 1; // Empezar en MW por defecto
 
 const uint16_t SWSubBands[] PROGMEM = { SW_LIMIT_LOW, 3500, 4500, 5500, 6500, 7500, 9000, 11000, 13000, 14500, 16000, 18000, 21000, 24000, 26000, CB_LIMIT_LOW };
-
-const uint8_t g_SWSubBandCount = sizeof(SWSubBands) / sizeof(uint16_t);
 
 volatile int8_t g_encoderCount = 0;
 uint16_t g_currentFrequency = 0;

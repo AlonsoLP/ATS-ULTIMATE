@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include "Config.h"
 
 class SSD1306PrintDevice;      // forward declaration del tipo
 // Declaramos que oled existe en otro sitio con su tipo real
@@ -59,17 +60,6 @@ void saveState();
 void loadState();
 
 // EEPROM
-#define EEPROM_MAGIC     0
+#define EEPROM_ADDR     0
 #define EEPROM_VALID_KEY 0xA5
-#define EEPROM_BAND      1
-#define EEPROM_MODE      2
-#define EEPROM_STEP      3
-#define EEPROM_BWSSB     4
-#define EEPROM_BWAM      5
-#define EEPROM_BWFM      6
-#define EEPROM_VOL       7
-#define EEPROM_FREQ_L    8
-#define EEPROM_FREQ_H    9
-#define EEPROM_SETTINGS  10
-#define EEPROM_VERSION   (EEPROM_SETTINGS + SETTINGS_MAX)
-#define EEPROM_FW_VERSION 1 // incrementar cada vez que cambie la estructura EEPROM
+#define EEPROM_FW_VERSION 1 // incrementar cuando cambie EepromData

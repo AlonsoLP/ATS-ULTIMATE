@@ -41,11 +41,11 @@ static void bandSwitch(bool up)
 {
     g_scanning = false;
     if (up) {
-        if (g_bandIndex < g_lastBand) g_bandIndex++;
+        if (g_bandIndex < LAST_BAND) g_bandIndex++;
         else g_bandIndex = 0;
     } else {
         if (g_bandIndex > 0) g_bandIndex--;
-        else g_bandIndex = g_lastBand;
+        else g_bandIndex = LAST_BAND;
     }
     g_currentBFO = 0;
     oledPrint(F("                "), 0, 6, DEFAULT_FONT);
@@ -109,19 +109,21 @@ static void loadSSBPatch()
 }
 
 void doMode(int8_t v) {
-    // En FM no se puede cambiar de modo
     if (g_bandIndex == FM_IDX) return;
 
-    // Ciclo: AM -> LSB -> USB -> CW -> AM
+    // CW siempre al final — truncar el count si está desactivado
     static const uint8_t s_modeOrder[] PROGMEM = { AM, LSB, USB, CW };
-    const uint8_t modeCount = 4;
+    const uint8_t modeCount = g_Settings[CWSwitch].param ? 4 : 3;
 
-    // Encontrar índice actual en modeOrder
+    // Si estamos en CW pero CW está desactivado, forzar a AM antes de ciclar
+    if (g_currentMode == CW && modeCount == 3)
+        g_currentMode = AM;
+
     uint8_t idx = 0;
     for (uint8_t i = 0; i < modeCount; i++) {
-	if ((Modulations)pgm_read_byte(&s_modeOrder[i]) == (Modulations)g_currentMode) {
-    	    idx = i; break;
-    	}
+        if ((Modulations)pgm_read_byte(&s_modeOrder[i]) == (Modulations)g_currentMode) {
+            idx = i; break;
+        }
     }
     idx = (idx + modeCount + v) % modeCount;
     g_currentMode = (int8_t)pgm_read_byte(&s_modeOrder[idx]);
@@ -134,36 +136,38 @@ void doMode(int8_t v) {
             g_bandList[g_bandIndex].minimumFreq,
             g_bandList[g_bandIndex].maximumFreq,
             g_currentFrequency,
-            (int)pgm_read_word(&g_tabStep[g_stepIndex]),
-            g_currentMode == LSB ? 1 : 2   // 1=LSB, 2=USB (CW usa LSB)
+            g_tabStep[g_stepIndex],
+            g_currentMode == LSB ? 1 : 2
         );
-        updateBFO(); // 0
+        g_si4735.setSSBBfo(0);
         updateSSBCutoffFilter();
     } else {
         g_ssbLoaded = false;
         applyBandConfiguration();
     }
+
     showStatus(true);
 }
 
-void doBandwidth(int8_t v) {
+static inline void wrapIndex(int8_t &idx, int8_t v, int8_t maxIdx)
+{
+    idx += v;
+    if (idx < 0)      idx = maxIdx;
+    if (idx > maxIdx) idx = 0;
+}
+
+void doBandwidth(int8_t v)
+{
     if (g_currentMode == FM) {
-        g_bwIndexFM += v;
-        if (g_bwIndexFM < 0) g_bwIndexFM = 4;
-        if (g_bwIndexFM > 4) g_bwIndexFM = 0;
+        wrapIndex(g_bwIndexFM, v, 4);
         g_si4735.setFmBandwidth(g_bwIndexFM);
     } else if (isSSB()) {
-        g_bwIndexSSB += v;
-        if (g_bwIndexSSB < 0) g_bwIndexSSB = (int8_t)g_bwSSBMaxIdx;
-        if (g_bwIndexSSB > (int8_t)g_bwSSBMaxIdx) g_bwIndexSSB = 0;
+        wrapIndex(g_bwIndexSSB, v, (int8_t)BW_SSB_MAX);
         g_bandList[g_bandIndex].bandwidthIdx = g_bwIndexSSB;
         g_si4735.setSSBAudioBandwidth(g_bandwidthSSB[g_bwIndexSSB].idx);
         updateSSBCutoffFilter();
     } else {
-        // AM/LW/MW/SW
-        g_bwIndexAM += v;
-        if (g_bwIndexAM < 0) g_bwIndexAM = (int8_t)g_maxFilterAM;
-        if (g_bwIndexAM > (int8_t)g_maxFilterAM) g_bwIndexAM = 0;
+        wrapIndex(g_bwIndexAM, v, (int8_t)BW_AM_MAX);
         g_bandList[g_bandIndex].bandwidthIdx = g_bwIndexAM;
         g_si4735.setBandwidth(g_bandwidthAM[g_bwIndexAM].idx, 1);
     }
@@ -188,8 +192,8 @@ static int8_t g_swSubBandIndex = 0;
 
 void doSWSubBand(int8_t v) {
     g_swSubBandIndex += v;
-    if (g_swSubBandIndex < 0) g_swSubBandIndex = (int8_t)g_SWSubBandCount - 1;
-    if (g_swSubBandIndex >= (int8_t)g_SWSubBandCount) g_swSubBandIndex = 0;
+    if (g_swSubBandIndex < 0) g_swSubBandIndex = SW_SUBBAND_COUNT - 1;
+    if (g_swSubBandIndex >= SW_SUBBAND_COUNT) g_swSubBandIndex = 0;
     g_currentFrequency = pgm_read_word(&SWSubBands[g_swSubBandIndex]);
     g_bandList[SW_IDX].currentFreq = g_currentFrequency;
     g_si4735.setFrequency(g_currentFrequency);

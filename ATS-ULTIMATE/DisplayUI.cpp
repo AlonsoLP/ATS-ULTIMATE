@@ -5,13 +5,29 @@
 
 #ifdef USE_BATTERY_INDICATOR
 void showBattery() {
-    uint16_t raw = analogRead(BATTERY_PIN);
-    // Divisor 100k/100k → VCC máx ~8.4V → en 5V ref → escala
-    uint8_t pct = map(raw, 614, 818, 0, 100); // ~3.0V–4.2V * 2
-    pct = constrain(pct, 0, 100);
-    char buf[6];
-    itoa(pct, buf, 10);
-    strcat(buf, "%");
+    // Throttle: leer ADC máximo cada 5 segundos
+    static uint32_t lastRead = 0;
+    static uint8_t  lastPct  = 0;
+    uint32_t now = millis();
+    if (now - lastRead > 5000) {
+        lastRead = now;
+        uint16_t raw = analogRead(BATTERY_PIN);
+        // Aritmética 16-bit pura — evita la multiplicación 32-bit de map()
+        if      (raw <= 614) lastPct = 0;
+        else if (raw >= 818) lastPct = 100;
+        else    lastPct = (uint8_t)((uint16_t)(raw - 614) * 100u / 204u);
+    }
+
+    // Construir "XXX%" sin itoa ni strcat
+    char buf[5];
+    if (lastPct == 100) {
+        buf[0]='1'; buf[1]='0'; buf[2]='0'; buf[3]='%'; buf[4]='\0';
+    } else {
+        buf[0] = (lastPct >= 10) ? ('0' + lastPct / 10) : ' ';
+        buf[1] = '0' + lastPct % 10;
+        buf[2] = '%';
+        buf[3] = '\0';
+    }
     oledPrint(buf, 100, 0, DEFAULT_FONT);
 }
 #endif
@@ -34,55 +50,58 @@ void oledPrint(const __FlashStringHelper* text, uint8_t x, uint8_t y, const DCfo
     if (invert) oled.invertOutput(false);
 }
 
-void showFrequency(bool cleanDisplay)
-{
+void showFrequency(bool cleanDisplay) {
     if (g_settingsActive) return;
 
-    char freqDisplay[12];
-    
-    // Si se nos pide limpiar (ej. al cambiar de banda), borramos solo el área numéricapara evitar parpadeos bruscos
-    if (cleanDisplay) {
-        oledPrint("        ", 15, 2, FONT14X24SEVENSEG);
-    }
+    char fd[8]; // freqDisplay — máximo "XX XXXMHZ" = 7 chars + \0
 
-    if (g_bandIndex == FM_IDX)
-    {
-        // Optimización CPU: Adiós al float. Calculamos los MHz y los decimales por separado
-        int mhz = g_currentFrequency / 100;
-        int decimales = g_currentFrequency % 100;
-        
-	itoa(mhz, freqDisplay, 10);
-	uint8_t len = strlen(freqDisplay);
-	while (len < 3) { memmove(freqDisplay+1, freqDisplay, len+1); freqDisplay[0]=' '; len++; }
-	freqDisplay[len] = '.';
-	freqDisplay[len+1] = '0' + decimales / 10;
-	freqDisplay[len+2] = '0' + decimales % 10;
-	freqDisplay[len+3] = '\0';
+    if (cleanDisplay)
+        oledPrint("      ", 15, 2, FONT14X24SEVENSEG);
 
-        oledPrint(freqDisplay, 15, 2, FONT14X24SEVENSEG); 
+    if (g_bandIndex == FM_IDX) {
+        // FM: frecuencia en MHz con 2 decimales  →  "107.50"
+        uint16_t mhz = g_currentFrequency / 100;
+        uint8_t  dec = g_currentFrequency % 100;
+        fd[0] = (mhz >= 100) ? ('0' + mhz / 100) : ' ';
+        fd[1] = '0' + (mhz % 100) / 10;
+        fd[2] = '0' +  mhz % 10;
+        fd[3] = '.';
+        fd[4] = '0' + dec / 10;
+        fd[5] = '0' + dec % 10;
+        fd[6] = '\0';
+        oledPrint(fd,    15, 2, FONT14X24SEVENSEG);
         oledPrint("MHz", 102, 5, DEFAULT_FONT);
-    } else {
-        // Optimización CPU para AM/SW y formateo con separación de miles
-        int miles = g_currentFrequency / 1000;
-        int unidades = g_currentFrequency % 1000;
 
+    } else if (g_Settings[UnitsSwitch].param && g_currentFrequency >= 1000) {
+        // AM/SW en MHz si UnitsSwitch=1 y freq >= 1 MHz  →  " 14.200"
+        uint16_t mhz = g_currentFrequency / 1000;
+        uint16_t khz = g_currentFrequency % 1000;
+        fd[0] = ' ';
+	fd[1] = (mhz >= 10) ? ('0' + mhz / 10) : ' ';
+	fd[2] = '0' + mhz % 10;
+        fd[3] = '.';
+        fd[4] = '0' + khz / 100;
+        fd[5] = '0' + (khz % 100) / 10;
+        fd[6] = '\0';
+        oledPrint(fd,    15, 2, FONT14X24SEVENSEG);
+        oledPrint("MHz", 102, 5, DEFAULT_FONT);
+
+    } else {
+        // AM/SW en kHz  →  "14 200" o "   300"
+        uint16_t miles    = g_currentFrequency / 1000;
+        uint16_t unidades = g_currentFrequency % 1000;
         if (miles > 0) {
-	    freqDisplay[0] = (miles < 10) ? ' ' : ('0' + miles / 10);
-	    freqDisplay[1] = '0' + miles % 10;
-	    freqDisplay[2] = ' ';
-	    freqDisplay[3] = '0' + unidades / 100;
-	    freqDisplay[4] = '0' + (unidades % 100) / 10;
-	    freqDisplay[5] = '0' + unidades % 10;
-	    freqDisplay[6] = '\0';
+            fd[0] = (miles < 10) ? ' ' : ('0' + miles / 10);
+            fd[1] = '0' + miles % 10;
+            fd[2] = ' ';
         } else {
-	    char freqDisplay[12] = "   ";
-	    freqDisplay[3] = (unidades >= 100) ? ('0' + unidades / 100) : ' ';
-	    freqDisplay[4] = (unidades >= 10)  ? ('0' + (unidades % 100) / 10) : ' ';
-	    freqDisplay[5] = '0' + unidades % 10;
-	    freqDisplay[6] = '\0';
+            fd[0] = fd[1] = fd[2] = ' ';
         }
-        
-        oledPrint(freqDisplay, 15, 2, FONT14X24SEVENSEG);
+        fd[3] = (unidades >= 100) ? ('0' + unidades / 100)        : ' ';
+        fd[4] = (unidades >=  10) ? ('0' + (unidades % 100) / 10) : ' ';
+        fd[5] = '0' + unidades % 10;
+        fd[6] = '\0';
+        oledPrint(fd,    15, 2, FONT14X24SEVENSEG);
         oledPrint("kHz", 102, 5, DEFAULT_FONT);
     }
 }
@@ -110,20 +129,30 @@ void showVolume()
 }
 
 static const char* getSWBandName(uint16_t freq) {
-    if (freq >= 1800  && freq <= 2000)  return "160m";
-    if (freq >= 3500  && freq <= 4000)  return " 80m";
-    if (freq >= 7000  && freq <= 7300)  return " 40m";
-    if (freq >= 14000 && freq <= 14350) return " 20m";
-    if (freq >= 21000 && freq <= 21450) return " 15m";
-    if (freq >= 28000 && freq <= 29700) return " 10m";
-    if (freq >= 3900  && freq <= 6200)  return " 75m";
-    if (freq >= 5900  && freq <= 6200)  return " 49m";
-    if (freq >= 7200  && freq <= 7450)  return " 41m";
-    if (freq >= 9400  && freq <= 9900)  return " 31m";
-    if (freq >= 11600 && freq <= 12100) return " 25m";
-    if (freq >= 13570 && freq <= 13870) return " 22m";
-    if (freq >= 15100 && freq <= 15800) return " 19m";
-    if (freq >= 17480 && freq <= 17900) return " 16m";
+    // { minFreq, maxFreq, nombre } — todo en PROGMEM
+    static const uint16_t s_bands[][2] PROGMEM = {
+        {1800,  2000}, {3500,  3900}, {3900,  4000}, {4750,  5060},
+        {5900,  6200}, {7000,  7200}, {7200,  7450}, {9400,  9900},
+        {11600,12100}, {13570,13870}, {14000,14350}, {15100,15800},
+        {17480,17900}, {21000,21450}, {28000,29700}
+    };
+    static const char s_names[] PROGMEM =
+        "160m" " 80m" " 75m" " 60m"
+        " 49m" " 40m" " 41m" " 31m"
+        " 25m" " 22m" " 20m" " 19m"
+        " 16m" " 15m" " 10m";
+
+    for (uint8_t i = 0; i < 15; i++) {
+        if (freq >= pgm_read_word(&s_bands[i][0]) &&
+            freq <= pgm_read_word(&s_bands[i][1]))
+        {
+            // Leer 4 chars desde PROGMEM a un buffer estático
+            static char buf[5];
+            memcpy_P(buf, s_names + i * 4, 4);
+            buf[4] = '\0';
+            return buf;
+        }
+    }
     return "  SW";
 }
 
@@ -143,11 +172,20 @@ void showModulation()
     oledPrint(label, 0, 0, DEFAULT_FONT);
 }
 
-void showStep()
-{
+void showStep() {
     char buf[10] = "St:";
-    int step = (g_bandIndex == FM_IDX) ? g_tabStepFM[g_FMStepIndex] : pgm_read_word(g_tabStep[g_stepIndex]);
-    itoa(step, buf + 3, 10);
+    int step = (g_bandIndex == FM_IDX)
+        ? (int)g_tabStepFM[g_FMStepIndex]
+        : (int)pgm_read_word(&g_tabStep[g_stepIndex]);
+
+    if (isSSB() && g_Settings[SWUnits].param == 1) {
+        // Mostrar en Hz cuando SWUnits=1 y estamos en SSB
+        itoa(step, buf + 3, 10);
+        strcat(buf, "H");   // "St:25H" → 25 Hz
+    } else {
+        itoa(step, buf + 3, 10);
+        // sin unidad, igual que ahora
+    }
     oledPrint(buf, 80, 0, DEFAULT_FONT);
 }
 
@@ -190,15 +228,14 @@ void showSMeter()
     // Mapeo de RSSI (0-64) a 16 caracteres de la pantalla
     int level = map(rssi, 0, 64, 0, 16);
     
-    for(int i=0; i<16; i++) {
-        bar[i] = (i < level) ? '|' : ' ';
-    }
+    for(int i=0; i<16; i++) bar[i] = (i < level) ? '|' : ' ';
     bar[16] = '\0';
     
     oledPrint(bar, 0, 7, DEFAULT_FONT);
 }
 
-void showBandTag() {
+void showBandTag()
+{
     static const char* const bandNames[] = { "LW", "MW", "SW", "FM" };
     char buf[17] = "BAND: ";
 
@@ -217,8 +254,7 @@ void showBandTag() {
 
     buf[14] = '/';
 
-    // g_lastBand+1 — también 1 dígito
-    buf[15] = '0' + (g_lastBand + 1);
+    buf[15] = '0' + (LAST_BAND + 1);
     buf[16] = '\0';
 
     oledPrint(buf, 0, 0, DEFAULT_FONT);
