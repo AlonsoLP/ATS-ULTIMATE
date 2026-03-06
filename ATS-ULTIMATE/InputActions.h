@@ -43,6 +43,8 @@ void doBFOCalibration(int8_t v);
 void doUnitsSwitch(int8_t v);
 void doScanSwitch(int8_t v);
 void doCWSwitch(int8_t v);
+void doRDS(int8_t v);
+void doDefaultVolume(int8_t v);
 
 void setupEncoder();
 void readEncoder();

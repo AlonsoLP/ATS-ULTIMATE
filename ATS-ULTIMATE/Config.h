@@ -76,12 +76,11 @@ struct SettingsItem {
 #define FM_LIMIT_LOW                6400    // 64.00 MHz
 #define FM_LIMIT_HIGH               10800   // 108.00 MHz
 
-// --- Configuración de Funciones ---
-#define USE_RDS                     1
-
 #define BW_SSB_MAX       5   // índice máximo g_bandwidthSSB
 #define BW_AM_MAX        6   // índice máximo g_bandwidthAM
 #define LAST_BAND        3   // índice último g_bandList
 #define SW_SUBBAND_COUNT 16  // elementos SWSubBands
 #define FM_TOTAL_STEPS   3
 #define FM_LAST_STEP     2
+
+#define USB_DETECT_THRESHOLD  860  // ADC raw > 860 → USB/cargador conectado (~4.4V)

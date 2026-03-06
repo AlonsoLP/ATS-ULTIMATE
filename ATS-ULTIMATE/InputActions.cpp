@@ -53,10 +53,10 @@ uint8_t volMinusEvent(uint8_t event, uint8_t pin)
 uint8_t bandPlusEvent(uint8_t event, uint8_t pin)
 {
     if (g_settingsActive) {
-        // Cambiar de página en ajustes
-        g_SettingsPage++;
-        if (g_SettingsPage * 3 >= SETTINGS_MAX) g_SettingsPage = 0;
-        showSettings();
+	// Saltar a la siguiente página manualmente si el usuario quiere
+	g_SettingSelected = ((g_SettingSelected / 4) + 1) * 4;
+	if (g_SettingSelected >= SETTINGS_MAX) g_SettingSelected = 0;
+	showSettings();
     } else {
         if (event == BUTTONEVENT_SHORTPRESS) {
 	    g_bandSelectMode = !g_bandSelectMode;
@@ -120,14 +120,12 @@ uint8_t modeEvent(uint8_t event, uint8_t pin)
 {
     if (event == BUTTONEVENT_SHORTPRESS) {
         if (g_bandIndex == FM_IDX) {
-#if USE_RDS
             // En FM: activar/desactivar RDS
             g_displayRDS = !g_displayRDS;
             if (!g_displayRDS)
                 oledPrint("                ", 0, 6, DEFAULT_FONT);
             else
                 showRDS();
-#endif
         } else {
             doMode(1);
         }
@@ -158,11 +156,9 @@ uint8_t tuneEvent(uint8_t event, uint8_t pin)
 	    if (isSSB()) {
 		doStep(1);
 	    } else if (g_bandIndex == FM_IDX && g_displayRDS) {
-#if USE_RDS
 		// Ciclar entre los 3 modos RDS
 		g_rdsMode = (RDSActiveInfo)((g_rdsMode + 1) % 3);
 		showRDS();
-#endif
 	    } else if (g_Settings[SettingsIndex::ScanSwitch].param == 1) {
 		g_scanning = !g_scanning;
 		if (!g_scanning) showStatus(false); // Al parar, refrescar pantalla
@@ -278,18 +274,9 @@ void doSSBSoftMuteMode(int8_t v)
 
 void doCPUSpeed(int8_t v)
 {
-    doSwitchLogic(g_Settings[CPUSpeed].param, 0, 1, v);
-    if (g_Settings[CPUSpeed].param == 0) {
-        // 16 MHz — modo normal
-        CLKPR = (1 << CLKPCE);   // habilitar cambio
-        CLKPR = 0x00;             // divisor /1 → 16 MHz
-        Wire.setClock(400000);    // I2C Fast Mode
-    } else {
-        // 8 MHz — modo ahorro
-        Wire.setClock(100000);    // bajar I2C ANTES de bajar CPU
-        CLKPR = (1 << CLKPCE);
-        CLKPR = 0x01;             // divisor /2 → 8 MHz
-    }
+    if (g_usbPowered) return;  // bloqueado si USB conectado
+    doSwitchLogic(g_Settings[CPUSpeed].param, 0, 3, v);
+    applyCPUSpeed(g_Settings[CPUSpeed].param);
 }
 
 void doCWSwitch(int8_t v)
@@ -336,6 +323,19 @@ void doSSBAVC(int8_t v)
 void doScanSwitch(int8_t v)
 {
     doSwitchLogic(g_Settings[ScanSwitch].param, 0, 1, v);
+}
+
+void doRDS(int8_t v)
+{
+    doSwitchLogic(g_Settings[RDS].param, 0, 1, v);
+    g_displayRDS = g_Settings[RDS].param;
+    if (!g_displayRDS) oledPrint("                ", 0, 6, DEFAULT_FONT);
+}
+
+void doDefaultVolume(int8_t v) {
+    doSwitchLogic(g_Settings[DefaultVol].param, 0, 63, v);
+    g_si4735.setVolume(g_Settings[DefaultVol].param);
+    g_savedVolume = g_Settings[DefaultVol].param;
 }
 
 // Tabla de estados del encoder en PROGMEM — 16 bytes Flash, 0 RAM

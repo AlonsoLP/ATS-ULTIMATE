@@ -14,7 +14,4 @@ void showBandTag();
 
 void oledPrint(const char* text, uint8_t x, uint8_t y, const DCfont* font = DEFAULT_FONT, bool invert = false);
 void oledPrint(const __FlashStringHelper* text, uint8_t x, uint8_t y, const DCfont* font = DEFAULT_FONT, bool invert = false);
-
-#if USE_RDS
 void showRDS();
-#endif

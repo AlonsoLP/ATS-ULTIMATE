@@ -3,6 +3,8 @@
 
 int getSteps();
 int getLastStep();
+extern bool g_scanning;
+
 void applyBandConfiguration();
 void doBand(int8_t v);
 void doMode(int8_t v);
@@ -12,9 +14,4 @@ void doSWSubBand(int8_t v);
 void updateBFO();
 void agcSetFunc();
 void updateSSBCutoffFilter();
-
-extern bool g_scanning;
-
-#if USE_RDS
 void setRDSConfig(uint8_t bias);
-#endif

@@ -1,9 +1,7 @@
 #include "State.h"
 #include "InputActions.h"
 
-#if USE_RDS
 RDSActiveInfo g_rdsMode = StationName;
-#endif
 
 // --- Variables de Estado Globales ---
 long g_storeTime = 0; 
@@ -22,6 +20,7 @@ int8_t g_currentMode = AM; // AM, LSB, USB, CW, FM
 // --- Configuración de AJUSTES (Settings) ---
 // Formato: { "NOM", valor_inicial, min, max, tipo, callback }
 SettingsItem g_Settings[] = {
+    {"VOL ",30, 0, 63, Num,        doDefaultVolume},
     {"ATT",  0, 0, 37, Num,        doAttenuation},
     {"SMUT", 1, 0, 32, Num,        doSoftMute},
     {"SVC",  0, 0, 1,  Switch,     doSSBAVC},
@@ -32,10 +31,8 @@ SettingsItem g_Settings[] = {
     {"UNIT", 0, 0, 1,  Switch,     doSWUnits},
     {"SSM",  0, 0, 1,  Switch,     doSSBSoftMuteMode},
     {"FILT", 0, 0, 1,  Switch,     doCutoffFilter},
-    {"CPU",  0, 0, 1,  Switch,     doCPUSpeed},
-#if USE_RDS
-    {"RDS ", 0, 0, 1,  Num,        NULL}, // Ajustado dinámicamente
-#endif
+    {"CPU",  0, 0, 3,  Num,        doCPUSpeed},  // 0=16M 1=8M 2=4M 3=2M
+    {"RDS ", 0, 0, 1,  Switch,     doRDS},
     {"BFO",  0, 0, 0,  Num,        doBFOCalibration},
     {"UKHZ", 0, 0, 1,  Switch,     doUnitsSwitch},
     {"SCAN", 0, 0, 1,  Switch,     doScanSwitch},
@@ -66,9 +63,9 @@ int8_t g_bwIndexFM = 0;
 const char* g_bandwidthFM[] = { "AUTO", "110k", " 84k", " 60k", " 40k" };
 
 // --- Pasos de Frecuencia ---
-const int g_tabStep[] PROGMEM = { 1, 5, 9, 10, 50, 100, 1000, 10, 25, 50, 100, 500 };
-uint8_t g_amTotalSteps = 7;
-uint8_t g_ssbTotalSteps = 5;
+const int g_tabStep[] PROGMEM = { 1, 5, 9, 10, 50, 100, 1000, 1, 5, 10, 25, 50, 100, 500 };
+uint8_t g_amTotalSteps    = 7;
+uint8_t g_ssbTotalSteps   = 7;  // 1,5,10,25,50,100,500 Hz
 volatile int8_t g_stepIndex = 3;
 
 int8_t g_tabStepFM[] = { 5, 10, 100 };
@@ -102,3 +99,18 @@ bool g_isEditingSetting = false;
 bool g_screenOn = true;
 bool g_scanning = false;
 bool g_bandSelectMode = false;
+
+bool g_usbPowered = false;
+
+void applyCPUSpeed(int8_t level) {
+    // Tabla: {CLKPR, I2C_clock}
+    static const uint32_t i2cClk[] = {400000UL, 200000UL, 100000UL, 100000UL};
+    static const uint8_t  clkpr[]  = {0x00, 0x01, 0x02, 0x03};
+
+    if (level > 0) Wire.setClock(i2cClk[level]); // bajar I2C ANTES de bajar CPU
+    cli();
+    CLKPR = (1 << CLKPCE);
+    CLKPR = clkpr[level];
+    sei();
+    if (level == 0) Wire.setClock(i2cClk[level]); // subir I2C DESPUÉS de subir CPU
+}

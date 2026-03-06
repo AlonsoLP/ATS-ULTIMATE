@@ -202,23 +202,55 @@ void showBandwidth()
     oledPrint(buf, 0, 5, DEFAULT_FONT);
 }
 
-void showSettings()
-{
-    oled.clear();
-    oledPrint(F("--- AJUSTES ---"), 0, 0, DEFAULT_FONT);
-    
-    for (uint8_t i = 0; i < 3; i++)
-    {
-        uint8_t idx = (g_SettingsPage * 3) + i;
-        if (idx >= SETTINGS_MAX) break;
-        
-        char line[17];
-	strncpy(line, g_Settings[idx].name, 4);
-	line[4] = ':'; line[5] = ' ';
-	itoa(g_Settings[idx].param, line + 6, 10);
-	oledPrint(line, 0, (i + 1) * 2, DEFAULT_FONT, (g_SettingSelected == idx));
+void showSettings() {
+    g_SettingsPage = g_SettingSelected / 4;
+
+    for (uint8_t i = 0; i < 4; i++) {
+        uint8_t idx = (g_SettingsPage * 4) + i;
+        bool selected = (g_SettingSelected == idx);
+        bool editing  = selected && g_isEditingSetting;
+
+        char line[17] = "                ";  // 16 espacios
+
+        if (idx < SETTINGS_MAX) {
+            // Cursor + nombre
+            line[0] = selected ? '>' : ' ';
+            memcpy(line + 1, g_Settings[idx].name, 4);
+            line[5] = editing ? '[' : ':';
+
+            // Valor
+            char* dst = line + 6;
+            if (editing || g_Settings[idx].type == Num) {
+                itoa(g_Settings[idx].param, dst, 10);
+                if (editing) {
+                    dst[strlen(dst)] = ']';
+                }
+            } else {
+                memcpy(dst, g_Settings[idx].param ? "ON " : "OFF", 3);
+            }
+        }
+
+        oledPrint(line, 0, i * 2, DEFAULT_FONT, selected && !editing);
     }
 }
+
+//void showSettings()
+//{
+//    oled.clear();
+//    oledPrint(F("--- AJUSTES ---"), 0, 0, DEFAULT_FONT);
+//    
+//    for (uint8_t i = 0; i < 3; i++)
+//    {
+//        uint8_t idx = (g_SettingsPage * 3) + i;
+//        if (idx >= SETTINGS_MAX) break;
+//        
+//        char line[17];
+//	strncpy(line, g_Settings[idx].name, 4);
+//	line[4] = ':'; line[5] = ' ';
+//	itoa(g_Settings[idx].param, line + 6, 10);
+//	oledPrint(line, 0, (i + 1) * 2, DEFAULT_FONT, (g_SettingSelected == idx));
+//    }
+//}
 
 void showSMeter()
 {
@@ -260,7 +292,6 @@ void showBandTag()
     oledPrint(buf, 0, 0, DEFAULT_FONT);
 }
 
-#if USE_RDS
 void showRDS()
 {
     if (!g_displayRDS) {
@@ -288,4 +319,3 @@ void showRDS()
     rdsLine[16] = '\0';
     oledPrint(rdsLine, 0, 6, DEFAULT_FONT);
 }
-#endif
