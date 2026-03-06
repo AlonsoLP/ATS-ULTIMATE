@@ -116,6 +116,7 @@ void showStatus(bool cleanFreq)
     showModulation();
     showStep();
     showBandwidth();
+    if (isSSB()) showBFO();
 }
 
 void showVolume()
@@ -234,24 +235,6 @@ void showSettings() {
     }
 }
 
-//void showSettings()
-//{
-//    oled.clear();
-//    oledPrint(F("--- AJUSTES ---"), 0, 0, DEFAULT_FONT);
-//    
-//    for (uint8_t i = 0; i < 3; i++)
-//    {
-//        uint8_t idx = (g_SettingsPage * 3) + i;
-//        if (idx >= SETTINGS_MAX) break;
-//        
-//        char line[17];
-//	strncpy(line, g_Settings[idx].name, 4);
-//	line[4] = ':'; line[5] = ' ';
-//	itoa(g_Settings[idx].param, line + 6, 10);
-//	oledPrint(line, 0, (i + 1) * 2, DEFAULT_FONT, (g_SettingSelected == idx));
-//    }
-//}
-
 void showSMeter()
 {
     g_si4735.getCurrentReceivedSignalQuality();
@@ -318,4 +301,35 @@ void showRDS()
     if (txt != nullptr) strncpy(rdsLine, txt, 16);
     rdsLine[16] = '\0';
     oledPrint(rdsLine, 0, 6, DEFAULT_FONT);
+}
+
+void showBFO() {
+    if (!isSSB()) return;
+
+    char buf[10] = "BFO:";
+    int bfo = g_currentBFO;
+
+    if (bfo >= 0) {
+        buf[4] = '+';
+    } else {
+        buf[4] = '-';
+        bfo = -bfo;
+    }
+
+    if (bfo >= 1000) {
+        // Mostrar en kHz con 1 decimal: "+1.2k"
+        buf[5] = '0' + bfo / 1000;
+        buf[6] = '.';
+        buf[7] = '0' + (bfo % 1000) / 100;
+        buf[8] = 'k';
+        buf[9] = '\0';
+    } else {
+        // Mostrar en Hz: "+350H"
+        itoa(bfo, buf + 5, 10);
+        uint8_t len = strlen(buf);
+        buf[len] = 'H';
+        buf[len + 1] = '\0';
+    }
+
+    oledPrint(buf, 0, 6, DEFAULT_FONT);
 }

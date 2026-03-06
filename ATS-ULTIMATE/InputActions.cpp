@@ -198,6 +198,7 @@ void doFrequencyTuneSSB(int8_t v)
         else if (g_currentBFO < -BFO_MAX) { g_currentBFO += BFO_MAX * 2; carrierShift(-1); }
 
         updateBFO();
+        showBFO();
     } else {
         g_currentBFO = 0;
         updateBFO();
@@ -206,6 +207,7 @@ void doFrequencyTuneSSB(int8_t v)
         g_bandList[g_bandIndex].currentFreq = g_currentFrequency;
         g_si4735.setFrequency(g_currentFrequency);
         showFrequency(false);
+	showBFO();
     }
 }
 
