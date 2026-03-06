@@ -1,7 +1,10 @@
 #pragma once
 #include <Arduino.h>
-#include <Tiny4kOLED_common.h> // Esto define los tipos y fuentes, pero NO crea el objeto 'oled'
-extern SSD1306PrintDevice oled; // Avisamos que la 'oled' real está en otro sitio
+#include <Tiny4kOLED_common.h>
+
+#define FW_VERSION   "1.0.0"
+
+extern SSD1306PrintDevice oled;
 
 // #define ENCODER_REVERSED
 #define CW_PITCH_OFFSET_HZ  500   // offset sidetone CW

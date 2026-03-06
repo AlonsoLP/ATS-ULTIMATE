@@ -45,6 +45,8 @@ void doScanSwitch(int8_t v);
 void doCWSwitch(int8_t v);
 void doRDS(int8_t v);
 void doDefaultVolume(int8_t v);
+void doStepUnits(int8_t v);
+void doCWSide(int8_t v);
 
 void setupEncoder();
 void readEncoder();

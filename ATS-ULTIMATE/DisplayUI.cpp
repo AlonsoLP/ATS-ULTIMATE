@@ -4,7 +4,8 @@
 #include "font14x24sevenSeg.h"
 
 #ifdef USE_BATTERY_INDICATOR
-void showBattery() {
+void showBattery()
+{
     // Throttle: leer ADC máximo cada 5 segundos
     static uint32_t lastRead = 0;
     static uint8_t  lastPct  = 0;
@@ -50,7 +51,8 @@ void oledPrint(const __FlashStringHelper* text, uint8_t x, uint8_t y, const DCfo
     if (invert) oled.invertOutput(false);
 }
 
-void showFrequency(bool cleanDisplay) {
+void showFrequency(bool cleanDisplay)
+{
     if (g_settingsActive) return;
 
     char fd[8]; // freqDisplay — máximo "XX XXXMHZ" = 7 chars + \0
@@ -115,21 +117,13 @@ void showStatus(bool cleanFreq)
     showFrequency();
     showModulation();
     showStep();
+    showVolumeBar();
     showBandwidth();
     if (isSSB()) showBFO();
 }
 
-void showVolume()
+static const char* getSWBandName(uint16_t freq)
 {
-    uint8_t vol = g_si4735.getVolume();
-    char buf[8] = "VOL: ";
-    buf[5] = '0' + vol / 10;
-    buf[6] = '0' + vol % 10;
-    buf[7] = '\0';
-    oledPrint(buf, 0, 7, DEFAULT_FONT);
-}
-
-static const char* getSWBandName(uint16_t freq) {
     // { minFreq, maxFreq, nombre } — todo en PROGMEM
     static const uint16_t s_bands[][2] PROGMEM = {
         {1800,  2000}, {3500,  3900}, {3900,  4000}, {4750,  5060},
@@ -173,13 +167,14 @@ void showModulation()
     oledPrint(label, 0, 0, DEFAULT_FONT);
 }
 
-void showStep() {
+void showStep()
+{
     char buf[10] = "St:";
     int step = (g_bandIndex == FM_IDX)
-        ? (int)g_tabStepFM[g_FMStepIndex]
+        ? (int)pgm_read_byte(&g_tabStepFM[g_FMStepIndex])
         : (int)pgm_read_word(&g_tabStep[g_stepIndex]);
 
-    if (isSSB() && g_Settings[SWUnits].param == 1) {
+    if (isSSB() && g_Settings[StepUnits].param == 1) {
         // Mostrar en Hz cuando SWUnits=1 y estamos en SSB
         itoa(step, buf + 3, 10);
         strcat(buf, "H");   // "St:25H" → 25 Hz
@@ -187,7 +182,7 @@ void showStep() {
         itoa(step, buf + 3, 10);
         // sin unidad, igual que ahora
     }
-    oledPrint(buf, 80, 0, DEFAULT_FONT);
+    oledPrint(buf, 55, 0, DEFAULT_FONT);
 }
 
 void showBandwidth()
@@ -203,7 +198,8 @@ void showBandwidth()
     oledPrint(buf, 0, 5, DEFAULT_FONT);
 }
 
-void showSettings() {
+void showSettings()
+{
     g_SettingsPage = g_SettingSelected / 4;
 
     for (uint8_t i = 0; i < 4; i++) {
@@ -303,7 +299,8 @@ void showRDS()
     oledPrint(rdsLine, 0, 6, DEFAULT_FONT);
 }
 
-void showBFO() {
+void showBFO()
+{
     if (!isSSB()) return;
 
     char buf[10] = "BFO:";
@@ -326,10 +323,28 @@ void showBFO() {
     } else {
         // Mostrar en Hz: "+350H"
         itoa(bfo, buf + 5, 10);
-        uint8_t len = strlen(buf);
-        buf[len] = 'H';
-        buf[len + 1] = '\0';
+	uint8_t len = strlen(buf + 5);
+	buf[5 + len] = 'H';
+        buf[6 + len] = '\0';
     }
 
     oledPrint(buf, 0, 6, DEFAULT_FONT);
+}
+
+void showSplash()
+{
+    oled.clear();
+    oledPrint(F("ATS-ULTIMATE"),     0, 0, DEFAULT_FONT);
+    oledPrint(F("v" FW_VERSION),     0, 2, DEFAULT_FONT);
+    oledPrint(F("EA7LBT"),        0, 4, DEFAULT_FONT);
+}
+
+void showVolumeBar()
+{
+    char buf[5] = "V:";
+    uint8_t vol = g_muteVolume ? 0 : g_si4735.getVolume();
+    buf[2] = g_muteVolume ? 'M' : ('0' + vol / 10);
+    buf[3] = g_muteVolume ? ' ' : ('0' + vol % 10);
+    buf[4] = '\0';
+    oledPrint(buf, 100, 0, DEFAULT_FONT);
 }

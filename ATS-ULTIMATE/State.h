@@ -6,9 +6,10 @@
 
 // --- Enumeraciones de Control ---
 enum SettingsIndex {
-    ATT, SoftMute, SVC, Sync, DeEmp, AutoVolControl, Brightness,
-    SWUnits, SSM, CutoffFilter, CPUSpeed, RDS, BFO, UnitsSwitch,
-    ScanSwitch, CWSwitch, DefaultVol,SETTINGS_MAX
+    DefaultVol, ATT, SoftMute, SVC, Sync, DeEmp, AutoVolControl,
+    Brightness, SWUnits, SSM, CutoffFilter, CPUSpeed, RDS, BFO,
+    UnitsSwitch, ScanSwitch, CWSwitch, CWSide, StepUnits,
+    SETTINGS_MAX
 };
 
 struct EepromData {
@@ -64,12 +65,13 @@ extern int8_t     g_bwIndexFM;
 extern const char* g_bandwidthFM[];
 
 // Pasos de frecuencia
-extern const int    g_tabStep[];      // definido con PROGMEM en State.cpp
-extern uint8_t      g_amTotalSteps;
-extern uint8_t      g_ssbTotalSteps;
+extern const int       g_tabStep[];
+extern const uint8_t   g_amTotalSteps;
+extern const uint8_t   g_ssbTotalSteps;
 extern volatile int8_t g_stepIndex;
-extern int8_t       g_tabStepFM[];
-extern uint8_t      g_FMStepIndex;
+extern const int8_t    g_tabStepFM[];
+//extern int8_t          g_tabStepFM[];
+extern uint8_t         g_FMStepIndex;
 
 // Bandas
 extern Band           g_bandList[];

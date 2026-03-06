@@ -1,3 +1,9 @@
+/**
+ * @file    State.cpp
+ * @brief   Variables de estado global, configuración de settings y bandas.
+ * @author  Alonso José Lara Plana (EA7LBT)
+ * @license MIT — ver ATS-ULTIMATE.ino para texto completo
+ */
 #include "State.h"
 #include "InputActions.h"
 
@@ -20,23 +26,25 @@ int8_t g_currentMode = AM; // AM, LSB, USB, CW, FM
 // --- Configuración de AJUSTES (Settings) ---
 // Formato: { "NOM", valor_inicial, min, max, tipo, callback }
 SettingsItem g_Settings[] = {
-    {"VOL ",30, 0, 63, Num,        doDefaultVolume},
-    {"ATT",  0, 0, 37, Num,        doAttenuation},
-    {"SMUT", 1, 0, 32, Num,        doSoftMute},
-    {"SVC",  0, 0, 1,  Switch,     doSSBAVC},
-    {"SYNC", 0, 0, 1,  Switch,     doSync},
-    {"DEEM", 0, 0, 1,  Switch,     doDeEmp},
-    {"AVC",  1, 0, 1,  Switch,     doAvc},
-    {"BRIG", 10,1, 15, Num,        doBrightness},
-    {"UNIT", 0, 0, 1,  Switch,     doSWUnits},
-    {"SSM",  0, 0, 1,  Switch,     doSSBSoftMuteMode},
-    {"FILT", 0, 0, 1,  Switch,     doCutoffFilter},
-    {"CPU",  0, 0, 3,  Num,        doCPUSpeed},  // 0=16M 1=8M 2=4M 3=2M
-    {"RDS ", 0, 0, 1,  Switch,     doRDS},
-    {"BFO",  0, 0, 0,  Num,        doBFOCalibration},
-    {"UKHZ", 0, 0, 1,  Switch,     doUnitsSwitch},
-    {"SCAN", 0, 0, 1,  Switch,     doScanSwitch},
-    {"CW  ", 0, 0, 1,  Switch,     doCWSwitch}
+    {"VOL ",30, 0, 63, Num,     doDefaultVolume},
+    {"ATT",  0, 0, 37, Num,     doAttenuation},
+    {"SMUT", 1, 0, 32, Num,     doSoftMute},
+    {"SVC",  0, 0, 1,  Switch,  doSSBAVC},
+    {"SYNC", 0, 0, 1,  Switch,  doSync},
+    {"DEEM", 0, 0, 1,  Switch,  doDeEmp},
+    {"AVC",  1, 0, 1,  Switch,  doAvc},
+    {"BRIG", 10,1, 15, Num,     doBrightness},
+    {"UNIT", 0, 0, 1,  Switch,  doSWUnits},
+    {"SSM",  0, 0, 1,  Switch,  doSSBSoftMuteMode},
+    {"FILT", 0, 0, 1,  Switch,  doCutoffFilter},
+    {"CPU",  0, 0, 3,  Num,     doCPUSpeed},  // 0=16M 1=8M 2=4M 3=2M
+    {"RDS ", 0, 0, 1,  Switch,  doRDS},
+    {"BFO",  0, 0, 0,  Num,     doBFOCalibration}, // min/max=0: ignorados, doBFOCalibration acumula libre
+    {"UKHZ", 0, 0, 1,  Switch,  doUnitsSwitch},
+    {"SCAN", 0, 0, 1,  Switch,  doScanSwitch},
+    {"CW  ", 0, 0, 1,  Switch,  doCWSwitch},
+    {"CWSd", 1, 0, 1,  Switch,  doCWSide},    // 0=LSB, 1=USB (default USB)
+    {"STPU", 0, 0, 1,  Switch,  doStepUnits}  // 0=sin unidad, 1=muestra Hz en SSB
 };
 
 int8_t g_SettingSelected = 0;
@@ -44,14 +52,9 @@ int8_t g_SettingsPage = 0;
 
 // --- Configuración de Anchos de Banda ---
 int8_t g_bwIndexSSB = 4;
-static const char bw_ssb0[] PROGMEM = "1.2";
-static const char bw_ssb1[] PROGMEM = "2.3";
-static const char bw_ssb2[] PROGMEM = "3.0";
-static const char bw_ssb3[] PROGMEM = "4.0";
-static const char bw_ssb4[] PROGMEM = "0.5";
-static const char bw_ssb5[] PROGMEM = "1.0";
 Bandwidth g_bandwidthSSB[] = {
-    {4, bw_ssb0}, {5, bw_ssb1}, {6, bw_ssb2}, {7, bw_ssb3}, {0, bw_ssb4}, {1, bw_ssb5}
+    {4, "1.2"}, {5, "2.3"}, {6, "3.0"},
+    {7, "4.0"}, {0, "0.5"}, {1, "1.0"}
 };
 
 int8_t g_bwIndexAM = 4;
@@ -64,11 +67,12 @@ const char* g_bandwidthFM[] = { "AUTO", "110k", " 84k", " 60k", " 40k" };
 
 // --- Pasos de Frecuencia ---
 const int g_tabStep[] PROGMEM = { 1, 5, 9, 10, 50, 100, 1000, 1, 5, 10, 25, 50, 100, 500 };
-uint8_t g_amTotalSteps    = 7;
-uint8_t g_ssbTotalSteps   = 7;  // 1,5,10,25,50,100,500 Hz
+const uint8_t g_amTotalSteps    = 7;
+const uint8_t g_ssbTotalSteps   = 7;  // 1,5,10,25,50,100,500 Hz
 volatile int8_t g_stepIndex = 3;
 
-int8_t g_tabStepFM[] = { 5, 10, 100 };
+//int8_t g_tabStepFM[] = { 5, 10, 100 };
+const int8_t g_tabStepFM[] PROGMEM = { 5, 10, 100 };
 uint8_t g_FMStepIndex = 1;
 
 // --- Lista de Bandas ---
@@ -77,12 +81,6 @@ Band g_bandList[] = {
     { 520, 1710, 1476, 3, 4 },
     { SW_LIMIT_LOW, SW_LIMIT_HIGH, SW_LIMIT_LOW, 0, 4 },
     { 8750, 10800, 9580, 1, 0 }, // FM
-    { 1800,  2000,  1850, 0, 4 },  // 160m Ham
-    { 3500,  4000,  3700, 0, 4 },  // 80m Ham
-    { 7000,  7300,  7100, 0, 4 },  // 40m Ham
-    { 14000, 14350, 14200, 0, 4 }, // 20m Ham
-    { 21000, 21450, 21200, 0, 4 }, // 15m Ham
-    { 28000, 29700, 28400, 0, 4 }, // 10m Ham
 };
 
 int8_t g_bandIndex = 1; // Empezar en MW por defecto

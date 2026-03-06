@@ -48,7 +48,6 @@ static void bandSwitch(bool up)
         else g_bandIndex = LAST_BAND;
     }
     g_currentBFO = 0;
-    oledPrint(F("                "), 0, 6, DEFAULT_FONT);
     applyBandConfiguration();
 }
 
@@ -62,7 +61,8 @@ void applyBandConfiguration()
 
     g_currentFrequency = g_bandList[g_bandIndex].currentFreq;
     if (g_bandIndex == FM_IDX) {
-        g_si4735.setFM(g_bandList[g_bandIndex].minimumFreq, g_bandList[g_bandIndex].maximumFreq, g_currentFrequency, g_tabStepFM[g_FMStepIndex]);
+//        g_si4735.setFM(g_bandList[g_bandIndex].minimumFreq, g_bandList[g_bandIndex].maximumFreq, g_currentFrequency, g_tabStepFM[g_FMStepIndex]);
+        g_si4735.setFM(g_bandList[g_bandIndex].minimumFreq, g_bandList[g_bandIndex].maximumFreq, g_currentFrequency, pgm_read_byte(&g_tabStepFM[g_FMStepIndex]));
     } else {
         g_si4735.setAM(g_bandList[g_bandIndex].minimumFreq, g_bandList[g_bandIndex].maximumFreq, g_currentFrequency, (int)pgm_read_word(&g_tabStep[g_stepIndex]));
     }
@@ -136,17 +136,16 @@ void doMode(int8_t v) {
             g_bandList[g_bandIndex].minimumFreq,
             g_bandList[g_bandIndex].maximumFreq,
             g_currentFrequency,
-            g_tabStep[g_stepIndex],
-            g_currentMode == LSB ? 1 : 2
+            (int)pgm_read_word(&g_tabStep[g_stepIndex]),
+	    g_currentMode == LSB ? 1 : (g_currentMode == CW ? (g_Settings[CWSide].param == 0 ? 1 : 2) : 2)
         );
         g_si4735.setSSBBfo(0);
         updateSSBCutoffFilter();
+	showStatus(true);
     } else {
         g_ssbLoaded = false;
         applyBandConfiguration();
     }
-
-    showStatus(true);
 }
 
 static inline void wrapIndex(int8_t &idx, int8_t v, int8_t maxIdx)

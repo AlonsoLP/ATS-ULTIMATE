@@ -23,10 +23,11 @@ inline void doSwitchLogic(int8_t& param, int8_t low, int8_t high, int8_t step)
 }
 
 // --- Eventos de Botones ---
-uint8_t volPlusEvent(uint8_t event, uint8_t pin) {
+uint8_t volPlusEvent(uint8_t event, uint8_t pin)
+{
     if (event == BUTTONEVENT_SHORTPRESS) {
         g_cmdVolume = !g_cmdVolume;  // toggle modo volumen
-        showVolume();
+        showVolumeBar();
     } else if (event == BUTTONEVENT_FIRSTLONGPRESS || event == BUTTONEVENT_LONGPRESS) {
         g_cmdVolume = false;
         doVolume(2);
@@ -38,14 +39,13 @@ uint8_t volMinusEvent(uint8_t event, uint8_t pin)
 {
     if (event == BUTTONEVENT_SHORTPRESS) {
         g_muteVolume = !g_muteVolume;
-	if (g_muteVolume) {
-	    g_savedVolume = g_si4735.getVolume(); // guardar antes de silenciar
-	    g_si4735.setVolume(0);
-    	    showStatus(true);
-	} else {
-	    g_si4735.setVolume(g_savedVolume);    // restaurar el guardado
-	    showVolume();
-	}
+        if (g_muteVolume) {
+            g_savedVolume = g_si4735.getVolume();
+            g_si4735.setVolume(0);
+        } else {
+            g_si4735.setVolume(g_savedVolume);
+        }
+        showVolumeBar();  // ← una sola llamada, fuera del if/else
     }
     return event;
 }
@@ -65,7 +65,6 @@ uint8_t bandPlusEvent(uint8_t event, uint8_t pin)
     		showBandTag();
 	    } else {
     		applyBandConfiguration();
-    		showStatus(true);
 	    }
         } else if (event == BUTTONEVENT_FIRSTLONGPRESS || event == BUTTONEVENT_LONGPRESS) {
 	    if (g_bandIndex == SW_IDX) {
@@ -120,12 +119,8 @@ uint8_t modeEvent(uint8_t event, uint8_t pin)
 {
     if (event == BUTTONEVENT_SHORTPRESS) {
         if (g_bandIndex == FM_IDX) {
-            // En FM: activar/desactivar RDS
-            g_displayRDS = !g_displayRDS;
-            if (!g_displayRDS)
-                oledPrint("                ", 0, 6, DEFAULT_FONT);
-            else
-                showRDS();
+	    g_Settings[RDS].param = !g_Settings[RDS].param;
+	    doRDS(0);
         } else {
             doMode(1);
         }
@@ -187,7 +182,7 @@ void doFrequencyTuneSSB(int8_t v)
     if (step < 1000) {
         g_currentBFO += (v > 0) ? step : -step;
 
-        // Helper lambda-style para rollover de portadora
+	// [] — sin captura: accede a globales directamente
         auto carrierShift = [](int8_t dir) {
             g_currentFrequency += dir;
             g_bandList[g_bandIndex].currentFreq = g_currentFrequency;
@@ -249,7 +244,7 @@ void doVolume(int8_t v)
     if (currentVol < 0)  currentVol = 0;
     if (currentVol > 63) currentVol = 63;
     g_si4735.setVolume((uint8_t)currentVol);
-    showVolume();
+    showVolumeBar();
 }
 
 void doBFOCalibration(int8_t v)
@@ -334,10 +329,32 @@ void doRDS(int8_t v)
     if (!g_displayRDS) oledPrint("                ", 0, 6, DEFAULT_FONT);
 }
 
-void doDefaultVolume(int8_t v) {
+void doDefaultVolume(int8_t v)
+{
     doSwitchLogic(g_Settings[DefaultVol].param, 0, 63, v);
     g_si4735.setVolume(g_Settings[DefaultVol].param);
     g_savedVolume = g_Settings[DefaultVol].param;
+}
+
+void doStepUnits(int8_t v)
+{
+    doSwitchLogic(g_Settings[StepUnits].param, 0, 1, v);
+    showStep();
+}
+
+void doCWSide(int8_t v)
+{
+    doSwitchLogic(g_Settings[CWSide].param, 0, 1, v);
+    // Si estamos en CW ahora mismo, aplicar inmediatamente
+    if (g_currentMode == CW) {
+        g_si4735.setSSB(
+            g_bandList[g_bandIndex].minimumFreq,
+            g_bandList[g_bandIndex].maximumFreq,
+            g_currentFrequency,
+            (int)pgm_read_word(&g_tabStep[g_stepIndex]),
+            g_Settings[CWSide].param == 0 ? 1 : 2  // LSB=1, USB=2
+        );
+    }
 }
 
 // Tabla de estados del encoder en PROGMEM — 16 bytes Flash, 0 RAM
