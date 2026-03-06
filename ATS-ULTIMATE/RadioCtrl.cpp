@@ -1,4 +1,5 @@
 #include "RadioCtrl.h"
+#include <Wire.h>
 #include "State.h"
 #include "Config.h"
 #include "DisplayUI.h"
@@ -8,13 +9,13 @@ int getSteps()
 {
     if (isSSB())
     {
-        if (g_stepIndex >= g_amTotalSteps)
+        if (g_stepIndex >= AM_TOTAL_STEPS)
             return (int)pgm_read_word(&g_tabStep[g_stepIndex]);
 
         return (int)pgm_read_word(&g_tabStep[g_stepIndex]) * 1000;
     }
 
-    if (g_stepIndex >= g_amTotalSteps)
+    if (g_stepIndex >= AM_TOTAL_STEPS)
         g_stepIndex = 0;
 
     return (int)pgm_read_word(&g_tabStep[g_stepIndex]);
@@ -22,10 +23,7 @@ int getSteps()
 
 int getLastStep()
 {
-    if (isSSB())
-        return g_amTotalSteps + g_ssbTotalSteps - 1;
-
-    return g_amTotalSteps - 1;
+    return isSSB() ? (AM_TOTAL_STEPS + SSB_TOTAL_STEPS - 1) : (AM_TOTAL_STEPS - 1);
 }
 
 void updateSSBCutoffFilter()
@@ -108,7 +106,8 @@ static void loadSSBPatch()
     }
 }
 
-void doMode(int8_t v) {
+void doMode(int8_t v)
+{
     if (g_bandIndex == FM_IDX) return;
 
     // CW siempre al final — truncar el count si está desactivado
@@ -173,7 +172,8 @@ void doBandwidth(int8_t v)
     showBandwidth();
 }
 
-void doScan() {
+void doScan()
+{
     if (!g_scanning) return;
     g_si4735.seekNextStation();
     delay(100);  // dar tiempo al chip
@@ -187,9 +187,16 @@ void doScan() {
     }
 }
 
+void setRDSConfig(uint8_t bias)
+{
+    g_si4735.setRdsConfig(1, bias, bias, bias, bias);
+    // 1 = RDS habilitado, bias = umbral de error en cada bloque
+}
+
 static int8_t g_swSubBandIndex = 0;
 
-void doSWSubBand(int8_t v) {
+void doSWSubBand(int8_t v)
+{
     g_swSubBandIndex += v;
     if (g_swSubBandIndex < 0) g_swSubBandIndex = SW_SUBBAND_COUNT - 1;
     if (g_swSubBandIndex >= SW_SUBBAND_COUNT) g_swSubBandIndex = 0;
@@ -197,4 +204,34 @@ void doSWSubBand(int8_t v) {
     g_bandList[SW_IDX].currentFreq = g_currentFrequency;
     g_si4735.setFrequency(g_currentFrequency);
     showFrequency(false);
+}
+
+void checkUSBPower()
+{
+#ifdef USE_BATTERY_INDICATOR
+    static uint32_t lastUsbCheck = 0;
+    uint32_t now = millis();
+    if (now - lastUsbCheck <= 2000) return;
+    lastUsbCheck = now;
+
+    bool wasUsb = g_usbPowered;
+    g_usbPowered = (analogRead(BATTERY_PIN) > USB_DETECT_THRESHOLD);
+
+    if (g_usbPowered && !wasUsb)
+        applyCPUSpeed(0);
+    else if (!g_usbPowered && wasUsb)
+        applyCPUSpeed(g_Settings[CPUSpeed].param);
+#endif
+}
+
+void applyCPUSpeed(int8_t level)
+{
+    static const uint32_t i2cClk[] = {400000UL, 200000UL, 100000UL, 100000UL};
+    static const uint8_t  clkpr[]  = {0x00, 0x01, 0x02, 0x03};
+    if (level > 0) Wire.setClock(i2cClk[level]);
+    cli();
+    CLKPR = (1 << CLKPCE);
+    CLKPR = clkpr[level];
+    sei();
+    if (level == 0) Wire.setClock(i2cClk[level]);
 }

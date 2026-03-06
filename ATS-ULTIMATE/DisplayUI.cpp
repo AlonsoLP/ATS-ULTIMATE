@@ -6,28 +6,37 @@
 #ifdef USE_BATTERY_INDICATOR
 void showBattery()
 {
-    // Throttle: leer ADC máximo cada 5 segundos
     static uint32_t lastRead = 0;
     static uint8_t  lastPct  = 0;
+    static bool     lastUsb  = false;
+
     uint32_t now = millis();
     if (now - lastRead > 5000) {
         lastRead = now;
-        uint16_t raw = analogRead(BATTERY_PIN);
-        // Aritmética 16-bit pura — evita la multiplicación 32-bit de map()
-        if      (raw <= 614) lastPct = 0;
-        else if (raw >= 818) lastPct = 100;
-        else    lastPct = (uint8_t)((uint16_t)(raw - 614) * 100u / 204u);
+        lastUsb  = g_usbPowered;  // ya detectado en loop()
+        if (!lastUsb) {
+            uint16_t raw = analogRead(BATTERY_PIN);
+            if      (raw <= 614) lastPct = 0;
+            else if (raw >= 818) lastPct = 100;
+            else    lastPct = (uint8_t)((uint16_t)(raw - 614) * 100u / 204u);
+        }
     }
 
-    // Construir "XXX%" sin itoa ni strcat
     char buf[5];
-    if (lastPct == 100) {
+    if (g_usbPowered) {
+        // USB conectado → mostrar "USB"
+	buf[0]='C'; buf[1]='H'; buf[2]='G'; buf[3]=' '; buf[4]='\0';
+    } else if (lastPct <= 5) {
+        // Batería crítica → mostrar "LOW"
+        buf[0]='L'; buf[1]='O'; buf[2]='W'; buf[3]=' '; buf[4]='\0';
+    } else if (lastPct == 100) {
         buf[0]='1'; buf[1]='0'; buf[2]='0'; buf[3]='%'; buf[4]='\0';
     } else {
         buf[0] = (lastPct >= 10) ? ('0' + lastPct / 10) : ' ';
         buf[1] = '0' + lastPct % 10;
         buf[2] = '%';
-        buf[3] = '\0';
+        buf[3] = ' ';
+        buf[4] = '\0';
     }
     oledPrint(buf, 100, 0, DEFAULT_FONT);
 }
@@ -111,14 +120,16 @@ void showFrequency(bool cleanDisplay)
 void showStatus(bool cleanFreq)
 {
     if (cleanFreq) oled.clear();
-    if (!cleanFreq) {
-	oledPrint("          ", 0, 5, DEFAULT_FONT); // Limpiar zona BW
-    }
+    if (!cleanFreq) oledPrint("          ", 0, 5, DEFAULT_FONT);
     showFrequency();
     showModulation();
     showStep();
     showVolumeBar();
+#ifdef USE_BATTERY_INDICATOR
+    showBattery();
+#endif
     showBandwidth();
+    showLockIndicator();
     if (isSSB()) showBFO();
 }
 
@@ -169,7 +180,7 @@ void showModulation()
 
 void showStep()
 {
-    char buf[10] = "St:";
+    char buf[9] = "St:";
     int step = (g_bandIndex == FM_IDX)
         ? (int)pgm_read_byte(&g_tabStepFM[g_FMStepIndex])
         : (int)pgm_read_word(&g_tabStep[g_stepIndex]);
@@ -247,7 +258,7 @@ void showSMeter()
 
 void showBandTag()
 {
-    static const char* const bandNames[] = { "LW", "MW", "SW", "FM" };
+    static const char* const bandNames[] = { "LW", "MW", "SW", "FM", "CB"  };
     char buf[17] = "BAND: ";
 
     // Copiar nombre de banda y rellenar con espacios hasta 4 chars (%-4s)
@@ -347,4 +358,34 @@ void showVolumeBar()
     buf[3] = g_muteVolume ? ' ' : ('0' + vol % 10);
     buf[4] = '\0';
     oledPrint(buf, 100, 0, DEFAULT_FONT);
+}
+
+void showLockIndicator()
+{
+    if (g_keyLocked)
+        oledPrint(F("LCK"), 34, 0, DEFAULT_FONT);
+    else
+        oledPrint(F("   "), 34, 0, DEFAULT_FONT);
+}
+
+void updateDisplay()
+{
+    if (g_settingsActive) return;
+
+    static uint32_t lastUpdate = 0;
+    uint32_t now = millis();
+    if (now - lastUpdate <= 250) return;
+    lastUpdate = now;
+
+    if (g_showSmeterBar) showSMeter();
+    else oledPrint(F("                "), 0, 7, DEFAULT_FONT);
+
+    if (g_scanning && (g_currentMode == FM || g_currentMode == AM)) doScan();
+
+#ifdef USE_RDS
+    if (g_currentMode == FM && g_displayRDS) {
+        g_si4735.getRdsStatus();
+        showRDS();
+    }
+#endif
 }

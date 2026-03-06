@@ -51,3 +51,4 @@ void doCWSide(int8_t v);
 void setupEncoder();
 void readEncoder();
 void processButtons();
+void processEncoder();

@@ -15,3 +15,5 @@ void updateBFO();
 void agcSetFunc();
 void updateSSBCutoffFilter();
 void setRDSConfig(uint8_t bias);
+void checkUSBPower();
+void applyCPUSpeed(int8_t level);

@@ -14,6 +14,7 @@ long g_storeTime = 0;
 bool g_ssbLoaded = false;
 bool g_fmStereo = true;
 bool g_cmdVolume = false;
+bool g_keyLocked = false;
 
 bool g_settingsActive = false, g_muteVolume = false;
 bool g_displayRDS = false;
@@ -32,13 +33,13 @@ SettingsItem g_Settings[] = {
     {"SVC",  0, 0, 1,  Switch,  doSSBAVC},
     {"SYNC", 0, 0, 1,  Switch,  doSync},
     {"DEEM", 0, 0, 1,  Switch,  doDeEmp},
-    {"AVC",  1, 0, 1,  Switch,  doAvc},
+    {"AVC",  0, 0,26,  Num,     doAvc},
     {"BRIG", 10,1, 15, Num,     doBrightness},
     {"UNIT", 0, 0, 1,  Switch,  doSWUnits},
     {"SSM",  0, 0, 1,  Switch,  doSSBSoftMuteMode},
     {"FILT", 0, 0, 1,  Switch,  doCutoffFilter},
     {"CPU",  0, 0, 3,  Num,     doCPUSpeed},  // 0=16M 1=8M 2=4M 3=2M
-    {"RDS ", 0, 0, 1,  Switch,  doRDS},
+    {"RDS ", 0, 0, 3,  Num,     doRDS},
     {"BFO",  0, 0, 0,  Num,     doBFOCalibration}, // min/max=0: ignorados, doBFOCalibration acumula libre
     {"UKHZ", 0, 0, 1,  Switch,  doUnitsSwitch},
     {"SCAN", 0, 0, 1,  Switch,  doScanSwitch},
@@ -67,8 +68,6 @@ const char* g_bandwidthFM[] = { "AUTO", "110k", " 84k", " 60k", " 40k" };
 
 // --- Pasos de Frecuencia ---
 const int g_tabStep[] PROGMEM = { 1, 5, 9, 10, 50, 100, 1000, 1, 5, 10, 25, 50, 100, 500 };
-const uint8_t g_amTotalSteps    = 7;
-const uint8_t g_ssbTotalSteps   = 7;  // 1,5,10,25,50,100,500 Hz
 volatile int8_t g_stepIndex = 3;
 
 //int8_t g_tabStepFM[] = { 5, 10, 100 };
@@ -77,10 +76,11 @@ uint8_t g_FMStepIndex = 1;
 
 // --- Lista de Bandas ---
 Band g_bandList[] = {
-    { LW_LIMIT_LOW, 520, 300, 0, 4 },
-    { 520, 1710, 1476, 3, 4 },
-    { SW_LIMIT_LOW, SW_LIMIT_HIGH, SW_LIMIT_LOW, 0, 4 },
-    { 8750, 10800, 9580, 1, 0 }, // FM
+    { LW_LIMIT_LOW, 520,           300,          0, 4 },  // LW
+    { 520,          1710,          1476,         3, 4 },  // MW
+    { SW_LIMIT_LOW, SW_LIMIT_HIGH, SW_LIMIT_LOW, 0, 4 },  // SW
+    { 8750,         10800,         9580,         1, 0 },  // FM
+    { CB_LIMIT_LOW, 27405,         27185,        0, 4 },  // CB
 };
 
 int8_t g_bandIndex = 1; // Empezar en MW por defecto
@@ -97,18 +97,4 @@ bool g_isEditingSetting = false;
 bool g_screenOn = true;
 bool g_scanning = false;
 bool g_bandSelectMode = false;
-
 bool g_usbPowered = false;
-
-void applyCPUSpeed(int8_t level) {
-    // Tabla: {CLKPR, I2C_clock}
-    static const uint32_t i2cClk[] = {400000UL, 200000UL, 100000UL, 100000UL};
-    static const uint8_t  clkpr[]  = {0x00, 0x01, 0x02, 0x03};
-
-    if (level > 0) Wire.setClock(i2cClk[level]); // bajar I2C ANTES de bajar CPU
-    cli();
-    CLKPR = (1 << CLKPCE);
-    CLKPR = clkpr[level];
-    sei();
-    if (level == 0) Wire.setClock(i2cClk[level]); // subir I2C DESPUÉS de subir CPU
-}

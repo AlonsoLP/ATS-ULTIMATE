@@ -119,8 +119,9 @@ uint8_t modeEvent(uint8_t event, uint8_t pin)
 {
     if (event == BUTTONEVENT_SHORTPRESS) {
         if (g_bandIndex == FM_IDX) {
-	    g_Settings[RDS].param = !g_Settings[RDS].param;
-	    doRDS(0);
+	    g_Settings[RDS].param = g_Settings[RDS].param > 0 ? 0 : 1;
+	    g_displayRDS = (g_Settings[RDS].param > 0);
+	    if (!g_displayRDS) oledPrint("                ", 0, 6, DEFAULT_FONT);
         } else {
             doMode(1);
         }
@@ -130,10 +131,14 @@ uint8_t modeEvent(uint8_t event, uint8_t pin)
 
 uint8_t bwEvent(uint8_t event, uint8_t pin)
 {
-    if (event == BUTTONEVENT_SHORTPRESS) doBandwidth(1);
+    if (event == BUTTONEVENT_SHORTPRESS) {
+        doBandwidth(1);
+    } else if (event == BUTTONEVENT_FIRSTLONGPRESS) {
+        g_keyLocked = !g_keyLocked;
+        showLockIndicator();
+    }
     return event;
 }
-
 
 uint8_t tuneEvent(uint8_t event, uint8_t pin)
 {
@@ -221,13 +226,14 @@ void doSoftMute(int8_t v)
 void doBrightness(int8_t v)
 {
     doSwitchLogic(g_Settings[Brightness].param, 1, 15, v);
-    oled.setContrast(g_Settings[Brightness].param * 15);
+    oled.setContrast(g_Settings[Brightness].param * 17); // 15*17=255
 }
 
 void doAvc(int8_t v)
 {
-    doSwitchLogic(g_Settings[AutoVolControl].param, 0, 1, v);
-    g_si4735.setAMFrontEndAgcControl(g_Settings[AutoVolControl].param ? 0 : 1, 0);
+    doSwitchLogic(g_Settings[AutoVolControl].param, 0, 26, v);
+    g_si4735.setAMFrontEndAgcControl(g_Settings[AutoVolControl].param, 0);
+    // 0 = AGC activo con atenuación indicada, valor 0-26
 }
 
 void doStep(int8_t v)
@@ -324,9 +330,12 @@ void doScanSwitch(int8_t v)
 
 void doRDS(int8_t v)
 {
-    doSwitchLogic(g_Settings[RDS].param, 0, 1, v);
-    g_displayRDS = g_Settings[RDS].param;
-    if (!g_displayRDS) oledPrint("                ", 0, 6, DEFAULT_FONT);
+    doSwitchLogic(g_Settings[RDS].param, 0, 3, v);
+    g_displayRDS = (g_Settings[RDS].param > 0);  // 0=off, 1-3=on con umbral
+    if (g_displayRDS)
+        setRDSConfig(g_Settings[RDS].param);  // pasar umbral al chip
+    else
+        oledPrint("                ", 0, 6, DEFAULT_FONT);
 }
 
 void doDefaultVolume(int8_t v)
@@ -390,6 +399,10 @@ void setupEncoder()
 
 void processButtons()
 {
+    if (g_keyLocked) {
+        s_btnBw.checkEvent(bwEvent);  // único botón activo para desbloquear
+        return;
+    }
     s_btnVolP.checkEvent(volPlusEvent);
     s_btnVolM.checkEvent(volMinusEvent);
     s_btnBandP.checkEvent(bandPlusEvent);
@@ -399,4 +412,40 @@ void processButtons()
     s_btnBw.checkEvent(bwEvent);
     s_btnAgc.checkEvent(agcEvent);
     s_btnTune.checkEvent(tuneEvent);
+}
+
+void processEncoder()
+{
+    if (g_keyLocked) return;
+
+    int8_t rotacion = 0;
+    noInterrupts();
+    if (g_encoderCount != 0) {
+        rotacion = g_encoderCount;
+        g_encoderCount = 0;
+    }
+    interrupts();
+
+    if (rotacion == 0) return;
+
+    if (g_bandSelectMode) {
+        doBand(rotacion > 0 ? 1 : -1);
+        showBandTag();
+    } else if (g_settingsActive) {
+        if (g_isEditingSetting) {
+            if (g_Settings[g_SettingSelected].manipulateCallback != NULL)
+                g_Settings[g_SettingSelected].manipulateCallback(rotacion);
+        } else {
+            g_SettingSelected += rotacion;
+            if (g_SettingSelected < 0) g_SettingSelected = SETTINGS_MAX - 1;
+            if (g_SettingSelected >= SETTINGS_MAX) g_SettingSelected = 0;
+        }
+        showSettings();
+    } else if (g_cmdVolume) {
+        doVolume(rotacion);
+    } else {
+        if (isSSB()) doFrequencyTuneSSB(rotacion);
+        else         doFrequencyTune(rotacion);
+    }
+    g_storeTime = millis();
 }

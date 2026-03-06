@@ -46,6 +46,7 @@ extern bool      g_settingsActive, g_muteVolume;
 extern bool      g_displayRDS;
 extern bool      g_showSmeterBar;
 extern bool      g_isEditingSetting;
+extern bool	 g_keyLocked;
 
 extern SI4735    g_si4735;
 extern int       g_currentBFO;
@@ -66,8 +67,6 @@ extern const char* g_bandwidthFM[];
 
 // Pasos de frecuencia
 extern const int       g_tabStep[];
-extern const uint8_t   g_amTotalSteps;
-extern const uint8_t   g_ssbTotalSteps;
 extern volatile int8_t g_stepIndex;
 extern const int8_t    g_tabStepFM[];
 //extern int8_t          g_tabStepFM[];
@@ -89,6 +88,3 @@ extern bool            g_usbPowered;
 
 // Helpers inline
 inline bool isSSB() { return g_currentMode > AM && g_currentMode < FM; }
-
-// Control CPU
-extern void applyCPUSpeed(int8_t level);

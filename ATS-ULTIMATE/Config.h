@@ -81,9 +81,12 @@ struct SettingsItem {
 
 #define BW_SSB_MAX       5   // índice máximo g_bandwidthSSB
 #define BW_AM_MAX        6   // índice máximo g_bandwidthAM
-#define LAST_BAND        3   // índice último g_bandList
+#define LAST_BAND        4   // índice último g_bandList
 #define SW_SUBBAND_COUNT 16  // elementos SWSubBands
 #define FM_TOTAL_STEPS   3
 #define FM_LAST_STEP     2
 
 #define USB_DETECT_THRESHOLD  860  // ADC raw > 860 → USB/cargador conectado (~4.4V)
+
+#define AM_TOTAL_STEPS  7
+#define SSB_TOTAL_STEPS 7
