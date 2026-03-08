@@ -1,7 +1,14 @@
+/**
+ * @file    InputActions.cpp
+ * @brief   Procesamiento de botones, encoder y callbacks de configuración.
+ * @author  Alonso José Lara Plana (EA7LBT)
+ * @license MIT — ver ATS-ULTIMATE.ino para texto completo
+ */
 #include "InputActions.h"
 #include "State.h"
 #include "RadioCtrl.h"
 #include "DisplayUI.h"
+#include "Utils.h"
 
 // --- Instancias de botones ---
 static Button s_btnVolP(VOLUME_UP_BUTTON);
@@ -53,11 +60,28 @@ uint8_t volMinusEvent(uint8_t event, uint8_t pin)
 uint8_t bandPlusEvent(uint8_t event, uint8_t pin)
 {
     if (g_settingsActive) {
-	// Saltar a la siguiente página manualmente si el usuario quiere
-	g_SettingSelected = ((g_SettingSelected / 4) + 1) * 4;
-	if (g_SettingSelected >= SETTINGS_MAX) g_SettingSelected = 0;
-	showSettings();
+        g_SettingSelected = ((g_SettingSelected / 4) + 1) * 4;
+        if (g_SettingSelected >= SETTINGS_MAX) g_SettingSelected = 0;
+        showSettings();
     } else {
+        if (g_memoryMode && (event == BUTTONEVENT_FIRSTLONGPRESS || event == BUTTONEVENT_LONGPRESS)) {
+            MemoryChannel mem;
+            mem.freq = g_currentFrequency;
+            mem.bandIdx = g_bandIndex;
+            mem.mode = g_currentMode;
+            if (g_currentMode == FM) mem.bwIdx = g_bwIndexFM;
+            else if (isSSB()) mem.bwIdx = g_bwIndexSSB;
+            else mem.bwIdx = g_bwIndexAM;
+
+            saveMemory(g_memoryIndex, mem);
+            g_previewMemory = mem; 
+            
+            oled.invertOutput(true);
+            delay(100);
+            oled.invertOutput(false);
+            return event;
+        }
+
         if (event == BUTTONEVENT_SHORTPRESS) {
 	    g_bandSelectMode = !g_bandSelectMode;
 	    if (g_bandSelectMode) {
@@ -92,11 +116,15 @@ uint8_t bandMinusEvent(uint8_t event, uint8_t pin)
     return event;
 }
 
-uint8_t stepEvent(uint8_t event, uint8_t pin)
-{
-    if (event == BUTTONEVENT_SHORTPRESS) doStep(1);
-    else if (event == BUTTONEVENT_FIRSTLONGPRESS) {
-        g_showSmeterBar = !g_showSmeterBar; // Debes declarar esta variable en State.h
+uint8_t stepEvent(uint8_t event, uint8_t pin) {
+    if (event == BUTTONEVENT_SHORTPRESS) {
+        doStep(1);
+        g_lastDoublePress = millis();
+    } else if (event == BUTTONEVENT_FIRSTLONGPRESS) {
+        g_showSmeterBar = !g_showSmeterBar;
+        showStatus(true);
+    } else if (event == BUTTONEVENT_LONGPRESS && (millis() - g_lastDoublePress < 500)) {
+        if (!g_keyLocked) g_bandLocked = !g_bandLocked;
         showStatus(true);
     }
     return event;
@@ -107,7 +135,6 @@ uint8_t agcEvent(uint8_t event, uint8_t pin)
     if (event == BUTTONEVENT_SHORTPRESS) {
 	g_screenOn = !g_screenOn;
 	if (g_screenOn) oled.on(); else oled.off();
-
     } else if (event == BUTTONEVENT_FIRSTLONGPRESS && isSSB()) {
 	doSync(1);
 	showStatus(false);
@@ -133,6 +160,10 @@ uint8_t bwEvent(uint8_t event, uint8_t pin)
 {
     if (event == BUTTONEVENT_SHORTPRESS) {
         doBandwidth(1);
+        g_lastDoublePress = millis();
+    } else if (event == BUTTONEVENT_LONGPRESS && (millis() - g_lastDoublePress < 500)) {
+        g_snrMode = !g_snrMode;
+        showStatus(true);
     } else if (event == BUTTONEVENT_FIRSTLONGPRESS) {
         g_keyLocked = !g_keyLocked;
         showLockIndicator();
@@ -142,26 +173,44 @@ uint8_t bwEvent(uint8_t event, uint8_t pin)
 
 uint8_t tuneEvent(uint8_t event, uint8_t pin)
 {
+    if (event == BUTTONEVENT_FIRSTLONGPRESS || event == BUTTONEVENT_LONGPRESS) {
+        if (!g_settingsActive && !g_cmdVolume) {
+            g_memoryMode = !g_memoryMode;
+            if (g_memoryMode) {
+                loadMemory(g_memoryIndex, g_previewMemory);
+                oled.clear();
+            } else {
+                showStatus(true);
+            }
+        }
+        return event;
+    }
+
     if (event == BUTTONEVENT_SHORTPRESS) {
+        if (g_memoryMode) {
+            if (g_previewMemory.freq > 0 && g_previewMemory.freq != 0xFFFF) {
+                applyMemoryState(g_previewMemory);
+                g_memoryMode = false;
+            }
+            return event;
+        }
         if (g_settingsActive) {
-            // Si estamos en ajustes, clic para seleccionar/confirmar
             g_isEditingSetting = !g_isEditingSetting; 
             showSettings();
         } else {
-	    if (g_cmdVolume) {
-		g_cmdVolume = false;  // confirmar y salir del modo volumen
-		showStatus(false);
-		return event;
-	    }
-	    if (isSSB()) {
-		doStep(1);
-	    } else if (g_bandIndex == FM_IDX && g_displayRDS) {
-		// Ciclar entre los 3 modos RDS
-		g_rdsMode = (RDSActiveInfo)((g_rdsMode + 1) % 3);
-		showRDS();
-	    } else if (g_Settings[SettingsIndex::ScanSwitch].param == 1) {
-		g_scanning = !g_scanning;
-		if (!g_scanning) showStatus(false); // Al parar, refrescar pantalla
+            if (g_cmdVolume) {
+                g_cmdVolume = false;
+                showStatus(false);
+                return event;
+            }
+            if (isSSB()) {
+                doStep(1);
+            } else if (g_bandIndex == FM_IDX && g_displayRDS) {
+                g_rdsMode = (RDSActiveInfo)((g_rdsMode + 1) % 3);
+                showRDS();
+            } else if (g_Settings[SettingsIndex::ScanSwitch].param == 1) {
+                g_scanning = !g_scanning;
+                if (!g_scanning) showStatus(false);
             }
         }
     }
@@ -172,8 +221,16 @@ uint8_t tuneEvent(uint8_t event, uint8_t pin)
 void doFrequencyTune(int8_t v)
 {
     int step = getSteps();
-    if (v > 0) g_currentFrequency += step;
-    else g_currentFrequency -= step;
+    if (v > 0) {
+        g_currentFrequency += step;
+        if (g_currentFrequency > g_bandList[g_bandIndex].maximumFreq)
+            g_currentFrequency = g_bandList[g_bandIndex].maximumFreq;
+    } else {
+        if (g_currentFrequency > g_bandList[g_bandIndex].minimumFreq + step)
+            g_currentFrequency -= step;
+        else
+            g_currentFrequency = g_bandList[g_bandIndex].minimumFreq;
+    }
     g_bandList[g_bandIndex].currentFreq = g_currentFrequency;
     g_si4735.setFrequency(g_currentFrequency);
     showFrequency(false);
@@ -239,7 +296,7 @@ void doAvc(int8_t v)
 void doStep(int8_t v)
 {
     int8_t tempStep = g_stepIndex; // Copiamos el valor volatile a uno normal
-    int8_t maxStep = getLastStep();
+    int8_t maxStep = isSSB() ? (AM_TOTAL_STEPS + SSB_TOTAL_STEPS - 1) : (AM_TOTAL_STEPS - 1);
     doSwitchLogic(tempStep, 0, maxStep, v);
     g_stepIndex = tempStep; // Devolvemos el valor procesado
 }
@@ -428,6 +485,22 @@ void processEncoder()
 
     if (rotacion == 0) return;
 
+    if (g_memoryMode) {
+        g_memoryIndex += rotacion;
+        if (g_memoryIndex < 0) g_memoryIndex = MAX_MEMORIES - 1;
+        if (g_memoryIndex >= MAX_MEMORIES) g_memoryIndex = 0;
+        loadMemory(g_memoryIndex, g_previewMemory);
+        return; // Retornamos sin actualizar g_storeTime
+    }
+
+    // --- Aceleración de encoder ---
+    static uint32_t lastEncTime = 0;
+    static int8_t   lastDir     = 0;
+    uint32_t now    = millis();
+    int8_t   accel  = ((now - lastEncTime) < 80 && (rotacion > 0) == (lastDir > 0)) ? 5 : 1;
+    lastEncTime     = now;
+    lastDir         = rotacion;
+
     if (g_bandSelectMode) {
         doBand(rotacion > 0 ? 1 : -1);
         showBandTag();
@@ -444,8 +517,12 @@ void processEncoder()
     } else if (g_cmdVolume) {
         doVolume(rotacion);
     } else {
-        if (isSSB()) doFrequencyTuneSSB(rotacion);
-        else         doFrequencyTune(rotacion);
+	if (!g_bandLocked) {
+    	    doBand(rotacion > 0 ? 1 : -1);  // Cambio banda normal
+	} else {
+    	    if (isSSB()) doFrequencyTuneSSB(rotacion * accel);
+    	    else         doFrequencyTune(rotacion * accel);
+	}
     }
     g_storeTime = millis();
 }

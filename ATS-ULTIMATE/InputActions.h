@@ -1,3 +1,9 @@
+/**
+ * @file    InputActions.h
+ * @brief   Cabeceras para eventos de botones y encoder (mapeo ATS-20+).
+ * @author  Alonso José Lara Plana (EA7LBT)
+ * @license MIT — ver ATS-ULTIMATE.ino para texto completo
+ */
 #pragma once
 #include <Arduino.h>
 

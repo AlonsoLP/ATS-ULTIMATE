@@ -1,3 +1,9 @@
+/**
+ * @file    DisplayUI.cpp
+ * @brief   Funciones de renderizado UI: frecuencia, estado, memoria, S-meter, settings.
+ * @author  Alonso José Lara Plana (EA7LBT)
+ * @license MIT — ver ATS-ULTIMATE.ino para texto completo
+ */
 #include "DisplayUI.h"
 #include "State.h"
 #include "Config.h"
@@ -42,6 +48,76 @@ void showBattery()
 }
 #endif
 
+static void formatFreqBuf(char* fd, uint16_t freq, int8_t bandIdx)
+{
+    if (bandIdx == FM_IDX) {
+        uint16_t mhz = freq / 100;
+        uint8_t  dec = freq % 100;
+        fd[0] = (mhz >= 100) ? ('0' + mhz / 100) : ' ';
+        fd[1] = '0' + (mhz % 100) / 10;
+        fd[2] = '0' +  mhz % 10;
+        fd[3] = '.';
+        fd[4] = '0' + dec / 10;
+        fd[5] = '0' + dec % 10;
+        fd[6] = '\0';
+    } else if (g_Settings[UnitsSwitch].param && freq >= 1000) {
+        uint16_t mhz = freq / 1000;
+        uint16_t khz = freq % 1000;
+        fd[0] = ' ';
+        fd[1] = (mhz >= 10) ? ('0' + mhz / 10) : ' ';
+        fd[2] = '0' + mhz % 10;
+        fd[3] = '.';
+        fd[4] = '0' + khz / 100;
+        fd[5] = '0' + (khz % 100) / 10;
+        fd[6] = '\0';
+    } else {
+        uint16_t miles    = freq / 1000;
+        uint16_t unidades = freq % 1000;
+        fd[0] = fd[1] = fd[2] = ' ';
+        if (miles > 0) {
+            fd[0] = (miles < 10) ? ' ' : ('0' + miles / 10);
+            fd[1] = '0' + miles % 10;
+            fd[2] = ' ';
+        }
+        fd[3] = (unidades >= 100) ? ('0' + unidades / 100)        : ' ';
+        fd[4] = (unidades >=  10) ? ('0' + (unidades % 100) / 10) : ' ';
+        fd[5] = '0' + unidades % 10;
+        fd[6] = '\0';
+    }
+}
+
+static const char* const s_mods[] = {"AM", "LSB", "USB", "CW"};
+
+void showMemoryView()
+{
+    char buf[17] = "MEM CH:   ";
+    buf[8] = '0' + (g_memoryIndex + 1) / 10;
+    buf[9] = '0' + (g_memoryIndex + 1) % 10;
+    buf[10] = '\0';
+    oledPrint(buf, 0, 0, DEFAULT_FONT);
+
+    if (g_previewMemory.freq == 0 || g_previewMemory.freq == 0xFFFF) {
+        oledPrint(F("  [CANAL VACIO] "), 0, 4, DEFAULT_FONT);
+        oledPrint(F("                "), 0, 6, DEFAULT_FONT);
+    } else {
+	char fBuf[8];
+	formatFreqBuf(fBuf, g_previewMemory.freq, g_previewMemory.bandIdx);
+	oledPrint(fBuf, 0, 3, FONT14X24SEVENSEG);
+
+	if (g_previewMemory.bandIdx == FM_IDX || (g_Settings[UnitsSwitch].param && g_previewMemory.freq >= 1000))
+	    oledPrint("MHz", 102, 5, DEFAULT_FONT);
+	else
+	    oledPrint("kHz", 102, 5, DEFAULT_FONT);
+
+        const char* mStr = (g_previewMemory.mode == FM) ? "FM" : s_mods[g_previewMemory.mode];
+        char mBuf[17] = "Modo:           ";
+        uint8_t i = 0;
+        while (mStr[i] && i < 4) { mBuf[6+i] = mStr[i]; i++; }
+        mBuf[10] = '\0';
+        oledPrint(mBuf, 0, 6, DEFAULT_FONT);
+    }
+}
+
 void oledPrint(const char* text, uint8_t x, uint8_t y, const DCfont* font = DEFAULT_FONT, bool invert = false)
 {
     oled.setFont(font);
@@ -63,58 +139,15 @@ void oledPrint(const __FlashStringHelper* text, uint8_t x, uint8_t y, const DCfo
 void showFrequency(bool cleanDisplay)
 {
     if (g_settingsActive) return;
+    if (cleanDisplay) oledPrint("      ", 15, 2, FONT14X24SEVENSEG);
 
-    char fd[8]; // freqDisplay — máximo "XX XXXMHZ" = 7 chars + \0
+    char fd[8];
+    formatFreqBuf(fd, g_currentFrequency, g_bandIndex);
+    oledPrint(fd, 15, 2, FONT14X24SEVENSEG);
 
-    if (cleanDisplay)
-        oledPrint("      ", 15, 2, FONT14X24SEVENSEG);
-
-    if (g_bandIndex == FM_IDX) {
-        // FM: frecuencia en MHz con 2 decimales  →  "107.50"
-        uint16_t mhz = g_currentFrequency / 100;
-        uint8_t  dec = g_currentFrequency % 100;
-        fd[0] = (mhz >= 100) ? ('0' + mhz / 100) : ' ';
-        fd[1] = '0' + (mhz % 100) / 10;
-        fd[2] = '0' +  mhz % 10;
-        fd[3] = '.';
-        fd[4] = '0' + dec / 10;
-        fd[5] = '0' + dec % 10;
-        fd[6] = '\0';
-        oledPrint(fd,    15, 2, FONT14X24SEVENSEG);
-        oledPrint("MHz", 102, 5, DEFAULT_FONT);
-
-    } else if (g_Settings[UnitsSwitch].param && g_currentFrequency >= 1000) {
-        // AM/SW en MHz si UnitsSwitch=1 y freq >= 1 MHz  →  " 14.200"
-        uint16_t mhz = g_currentFrequency / 1000;
-        uint16_t khz = g_currentFrequency % 1000;
-        fd[0] = ' ';
-	fd[1] = (mhz >= 10) ? ('0' + mhz / 10) : ' ';
-	fd[2] = '0' + mhz % 10;
-        fd[3] = '.';
-        fd[4] = '0' + khz / 100;
-        fd[5] = '0' + (khz % 100) / 10;
-        fd[6] = '\0';
-        oledPrint(fd,    15, 2, FONT14X24SEVENSEG);
-        oledPrint("MHz", 102, 5, DEFAULT_FONT);
-
-    } else {
-        // AM/SW en kHz  →  "14 200" o "   300"
-        uint16_t miles    = g_currentFrequency / 1000;
-        uint16_t unidades = g_currentFrequency % 1000;
-        if (miles > 0) {
-            fd[0] = (miles < 10) ? ' ' : ('0' + miles / 10);
-            fd[1] = '0' + miles % 10;
-            fd[2] = ' ';
-        } else {
-            fd[0] = fd[1] = fd[2] = ' ';
-        }
-        fd[3] = (unidades >= 100) ? ('0' + unidades / 100)        : ' ';
-        fd[4] = (unidades >=  10) ? ('0' + (unidades % 100) / 10) : ' ';
-        fd[5] = '0' + unidades % 10;
-        fd[6] = '\0';
-        oledPrint(fd,    15, 2, FONT14X24SEVENSEG);
-        oledPrint("kHz", 102, 5, DEFAULT_FONT);
-    }
+    bool showMHz = (g_bandIndex == FM_IDX) ||
+                   (g_Settings[UnitsSwitch].param && g_currentFrequency >= 1000);
+    oledPrint(showMHz ? "MHz" : "kHz", 102, 5, DEFAULT_FONT);
 }
 
 void showStatus(bool cleanFreq)
@@ -172,8 +205,7 @@ void showModulation()
         g_fmStereo = g_si4735.getCurrentPilot();
         label = g_fmStereo ? "FM ST" : "FM   ";
     } else {
-        static const char* mods[] = {"AM", "LSB", "USB", "CW"};
-        label = mods[g_currentMode];
+        label = s_mods[g_currentMode];
     }
     oledPrint(label, 0, 0, DEFAULT_FONT);
 }
@@ -242,23 +274,53 @@ void showSettings()
     }
 }
 
+void showSMeter() {
+    g_si4735.getCurrentReceivedSignalQuality();
+    
+    if (g_snrMode) {
+        char snrBuf[5];  // "255dB" = 4 chars + \0
+        itoa(g_si4735.getCurrentSNR(), snrBuf, 10);
+        snrBuf[3] = 'd'; snrBuf[4] = 'B'; snrBuf[5] = '\0';  // ← strcat → manual
+        oledPrint(snrBuf, 0, 7, DEFAULT_FONT);
+    } else {
+        char bar[17];
+        int level = map(g_si4735.getCurrentRSSI(), 0, 64, 0, 16);
+        
+        for (int i = 0; i < 16; i++) 
+            bar[i] = (i < level) ? '|' : ' ';
+        bar[16] = '\0';
+        oledPrint(bar, 0, 7, DEFAULT_FONT);
+    }
+}
+
+/*
 void showSMeter()
 {
     g_si4735.getCurrentReceivedSignalQuality();
+    int snr = g_si4735.getCurrentSNR();
     int rssi = g_si4735.getCurrentRSSI();
-    char bar[17];
-    // Mapeo de RSSI (0-64) a 16 caracteres de la pantalla
-    int level = map(rssi, 0, 64, 0, 16);
     
-    for(int i=0; i<16; i++) bar[i] = (i < level) ? '|' : ' ';
-    bar[16] = '\0';
+    if (g_snrMode) {
+        char snrBuf[6]; 
+        itoa(snr, snrBuf, 10); 
+        strcat(snrBuf, "dB"); 
+        oledPrint(snrBuf, 0, 7, DEFAULT_FONT);
+    } else {
+        // RSSI bar actual...
+	char bar[17];
+	int level = map(rssi, 0, 64, 0, 16);
     
-    oledPrint(bar, 0, 7, DEFAULT_FONT);
+	for (int i=0; i<16; i++) bar[i] = (i < level) ? '|' : ' ';
+	bar[16] = '\0';
+    
+	oledPrint(bar, 0, 7, DEFAULT_FONT);
+    }
 }
+*/
 
 void showBandTag()
 {
-    static const char* const bandNames[] = { "LW", "MW", "SW", "FM", "CB"  };
+    static const char* const bandNames[] = { "LW","MW","SW","FM","CB","AIR" };
     char buf[17] = "BAND: ";
 
     // Copiar nombre de banda y rellenar con espacios hasta 4 chars (%-4s)
@@ -345,9 +407,8 @@ void showBFO()
 void showSplash()
 {
     oled.clear();
-    oledPrint(F("ATS-ULTIMATE"),     0, 0, DEFAULT_FONT);
-    oledPrint(F("v" FW_VERSION),     0, 2, DEFAULT_FONT);
-    oledPrint(F("EA7LBT"),        0, 4, DEFAULT_FONT);
+    oledPrint(F("ATS-ULTIMATE"),     0, 1, DEFAULT_FONT);
+    oledPrint(F("v" FW_VERSION),     0, 3, DEFAULT_FONT);
 }
 
 void showVolumeBar()
@@ -362,15 +423,23 @@ void showVolumeBar()
 
 void showLockIndicator()
 {
-    if (g_keyLocked)
+    if (g_keyLocked) {
         oledPrint(F("LCK"), 34, 0, DEFAULT_FONT);
-    else
+    } else if (g_bandLocked) {
+        oledPrint("B.L", 34, 0, DEFAULT_FONT);  // ← Sin F() aquí
+    } else {
         oledPrint(F("   "), 34, 0, DEFAULT_FONT);
+    }
 }
 
 void updateDisplay()
 {
     if (g_settingsActive) return;
+
+    if (g_memoryMode) {
+        showMemoryView();
+        return; 
+    }
 
     static uint32_t lastUpdate = 0;
     uint32_t now = millis();
@@ -382,10 +451,8 @@ void updateDisplay()
 
     if (g_scanning && (g_currentMode == FM || g_currentMode == AM)) doScan();
 
-#ifdef USE_RDS
     if (g_currentMode == FM && g_displayRDS) {
         g_si4735.getRdsStatus();
         showRDS();
     }
-#endif
 }

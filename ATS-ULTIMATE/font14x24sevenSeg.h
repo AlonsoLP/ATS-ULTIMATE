@@ -13,9 +13,7 @@
 // http://github.com/goshante
 // ----------------------------------------------------------------------
 
-
 #include <avr/pgmspace.h>
-
 
 const uint8_t ssd1306xled_font14x24sevenSeg [] PROGMEM = 
 {

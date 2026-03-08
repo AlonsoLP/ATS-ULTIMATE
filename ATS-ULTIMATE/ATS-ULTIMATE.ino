@@ -1,17 +1,11 @@
 /**
  * @file    ATS-ULTIMATE.ino
  * @brief   Firmware alternativo para receptor ATS-20 / ATS-20+
- *          basado en el chip SI4735 de Silicon Laboratories.
- *
- * @details Firmware de código abierto con soporte para AM, SW, FM, SSB y CW.
- *          Incluye menú de configuración, indicador de batería, BFO ajustable,
- *          S-meter, RDS en FM, bandas de radioaficionado y gestión de CPU.
  *
  * @author  Alonso José Lara Plana (EA7LBT)
- * @version 1.0.0
- * @date    2026
+ * @version 1.0
+ * @date    2026.03
  *
- * @hardware ATS-20 / ATS-20+ (SI4735 + ATmega328P + OLED SSD1306 128x64)
  * @repo     https://github.com/AlonsoLP/ATS-ULTIMATE
  *
  * @license MIT License
@@ -39,13 +33,15 @@
  *          OTHER DEALINGS IN THE SOFTWARE.
  *
  * @credits Basado en los trabajos de:
+ *          - Goshante — ATS_EX Firmware for ATS-20 DSP Receiver
+ *            https://github.com/goshante/ats20_ats_ex
  *          - Ricardo Lima Caratti (PU2CLR) — Librería SI4735 Arduino
  *            https://github.com/pu2clr/SI4735
- *          - [COMPLETAR: otros proyectos o personas que hayan inspirado el firmware]
+ *          - Stephen Denne — Librería Tiny4kOLED
+ *            https://github.com/datacute/Tiny4kOLED
  *
  * @changelog
- *          1.0.0 (2026-XX-XX) — Primera versión pública
- *                              [COMPLETAR: fecha exacta de lanzamiento]
+ *          1.0 (2026-03-XX) — Primera versión pública
  */
 #include <Arduino.h>
 #include <Wire.h>

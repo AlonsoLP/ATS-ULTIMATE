@@ -1,8 +1,14 @@
+/**
+ * @file    Config.h
+ * @brief   Constantes de hardware, pines, límites de bandas y definiciones.
+ * @author  Alonso José Lara Plana (EA7LBT)
+ * @license MIT — ver ATS-ULTIMATE.ino para texto completo
+ */
 #pragma once
 #include <Arduino.h>
 #include <Tiny4kOLED_common.h>
 
-#define FW_VERSION   "1.0.0"
+#define FW_VERSION   "1.0"
 
 extern SSD1306PrintDevice oled;
 
@@ -81,12 +87,23 @@ struct SettingsItem {
 
 #define BW_SSB_MAX       5   // índice máximo g_bandwidthSSB
 #define BW_AM_MAX        6   // índice máximo g_bandwidthAM
-#define LAST_BAND        4   // índice último g_bandList
-#define SW_SUBBAND_COUNT 16  // elementos SWSubBands
+#define LAST_BAND        5   // índice último g_bandList
+#define SW_SUBBAND_COUNT 19  // elementos SWSubBands
 #define FM_TOTAL_STEPS   3
 #define FM_LAST_STEP     2
+#define AIR_IDX		 5
 
 #define USB_DETECT_THRESHOLD  860  // ADC raw > 860 → USB/cargador conectado (~4.4V)
 
-#define AM_TOTAL_STEPS  7
+#define AM_TOTAL_STEPS  14
 #define SSB_TOTAL_STEPS 7
+
+// --- Sistema de Memorias ---
+#define MAX_MEMORIES 20
+
+struct MemoryChannel {
+    uint16_t freq;       // Frecuencia (2 bytes)
+    int8_t   bandIdx;    // Índice de la banda (1 byte)
+    int8_t   mode;       // Modulación (1 byte)
+    int8_t   bwIdx;      // Ancho de banda (1 byte)
+}; // Total: 5 bytes por memoria en EEPROM

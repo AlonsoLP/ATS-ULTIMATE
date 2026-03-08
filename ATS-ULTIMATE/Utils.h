@@ -1,3 +1,9 @@
+/**
+ * @file    Utils.h
+ * @brief   Utilidades auxiliares y funciones helper genéricas.
+ * @author  Alonso José Lara Plana (EA7LBT)
+ * @license MIT — ver ATS-ULTIMATE.ino para texto completo
+ */
 #pragma once
 #include <Arduino.h>
 #include "Config.h"
@@ -63,3 +69,8 @@ void loadState();
 #define EEPROM_ADDR     0
 #define EEPROM_VALID_KEY 0xA5
 #define EEPROM_FW_VERSION 1 // incrementar cuando cambie EepromData
+
+// sistema de memorias
+#define EEPROM_MEM_OFFSET 50 // Seguro, tu EepromData ocupa ~30 bytes
+void saveMemory(uint8_t index, MemoryChannel& mem);
+void loadMemory(uint8_t index, MemoryChannel& mem);

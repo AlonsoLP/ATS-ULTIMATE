@@ -1,3 +1,9 @@
+/**
+ * @file    State.h
+ * @brief   Variables de estado global, configuración de settings y bandas.
+ * @author  Alonso José Lara Plana (EA7LBT)
+ * @license MIT — ver ATS-ULTIMATE.ino para texto completo
+ */
 #pragma once
 #include <Arduino.h>
 #include <SI4735.h>
@@ -24,6 +30,8 @@ struct EepromData {
     uint8_t  volume;
     uint16_t currentFreq;
     int8_t   settings[SETTINGS_MAX];
+    uint8_t  memoryIndex;
+    uint8_t  fmStepIndex;
 };
 
 enum BandTypeIdx : uint8_t {
@@ -86,5 +94,15 @@ extern bool            g_scanning;
 extern bool            g_bandSelectMode;
 extern bool            g_usbPowered;
 
+// Sistema de memoria
+extern bool g_memoryMode;
+extern int8_t g_memoryIndex;
+extern MemoryChannel g_previewMemory;
+
 // Helpers inline
 inline bool isSSB() { return g_currentMode > AM && g_currentMode < FM; }
+
+extern bool g_bandLocked;
+extern bool g_snrMode;
+
+extern uint32_t g_lastDoublePress;

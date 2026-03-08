@@ -1,9 +1,71 @@
+/**
+ * @file    RadioCtrl.cpp
+ * @brief   Lógica de control SI4735: cambio de banda, modo, paso, SSB patch.
+ * @author  Alonso José Lara Plana (EA7LBT)
+ * @license MIT — ver ATS-ULTIMATE.ino para texto completo
+ */
 #include "RadioCtrl.h"
 #include <Wire.h>
 #include "State.h"
 #include "Config.h"
 #include "DisplayUI.h"
 #include "patch_ssb_compressed.h"
+
+void applyRadioState()
+{
+    if (g_currentMode == FM) {
+        applyBandConfiguration(); 
+        g_si4735.setFmBandwidth(g_bwIndexFM);
+    } else if (isSSB()) {
+	if (!g_ssbLoaded) {
+    	    g_si4735.queryLibraryId();
+    	    g_si4735.patchPowerUp();
+	    g_si4735.downloadCompressedPatch(ssb_patch_content, sizeof(ssb_patch_content), cmd_0x15, sizeof(cmd_0x15) / sizeof(cmd_0x15[0]));
+    	    g_si4735.setSSBConfig(
+        	g_bandwidthSSB[g_bwIndexSSB].idx, // BW
+        	1,   // audioBW
+        	0,   // ssbaudioBWsnrBoost
+        	0,   // ssbFilterPower
+        	1,   // ssbSBUFIntegRate
+        	0    // reserved
+    	    );
+    	    g_ssbLoaded = true;
+	}
+
+        g_si4735.setSSB(
+            g_bandList[g_bandIndex].minimumFreq,
+            g_bandList[g_bandIndex].maximumFreq,
+            g_currentFrequency,
+            (int)pgm_read_word(&g_tabStep[g_stepIndex]),
+            g_currentMode == LSB ? 1 : (g_currentMode == CW ? (g_Settings[CWSide].param == 0 ? 1 : 2) : 2)
+        );
+        g_si4735.setSSBAudioBandwidth(g_bandwidthSSB[g_bwIndexSSB].idx);
+        g_si4735.setSSBBfo(g_currentBFO);
+        updateSSBCutoffFilter();
+        showStatus(true);
+    } else {
+        g_ssbLoaded = false;
+        applyBandConfiguration();
+        g_si4735.setBandwidth(g_bandwidthAM[g_bwIndexAM].idx, 1);
+    }
+}
+
+void applyMemoryState(MemoryChannel& mem)
+{
+    if (mem.bandIdx > LAST_BAND || mem.mode > FM) return;
+
+    g_bandIndex = mem.bandIdx;
+    g_currentFrequency = mem.freq;
+    g_bandList[g_bandIndex].currentFreq = g_currentFrequency;
+    g_currentMode = mem.mode;
+    
+    if (g_currentMode == FM) g_bwIndexFM = mem.bwIdx;
+    else if (isSSB()) g_bwIndexSSB = mem.bwIdx;
+    else g_bwIndexAM = mem.bwIdx;
+    
+    g_currentBFO = 0;
+    applyRadioState();
+}
 
 int getSteps()
 {
@@ -21,11 +83,6 @@ int getSteps()
     return (int)pgm_read_word(&g_tabStep[g_stepIndex]);
 }
 
-int getLastStep()
-{
-    return isSSB() ? (AM_TOTAL_STEPS + SSB_TOTAL_STEPS - 1) : (AM_TOTAL_STEPS - 1);
-}
-
 void updateSSBCutoffFilter()
 {
     // Acceso mediante SettingsIndex unificado para evitar errores de declaración
@@ -35,31 +92,20 @@ void updateSSBCutoffFilter()
         g_si4735.setSSBSidebandCutoffFilter(1);
 }
 
-static void bandSwitch(bool up)
-{
-    g_scanning = false;
-    if (up) {
-        if (g_bandIndex < LAST_BAND) g_bandIndex++;
-        else g_bandIndex = 0;
-    } else {
-        if (g_bandIndex > 0) g_bandIndex--;
-        else g_bandIndex = LAST_BAND;
-    }
-    g_currentBFO = 0;
-    applyBandConfiguration();
-}
-
 void applyBandConfiguration()
 {
     // validar ATT según modo
     if (g_bandIndex == FM_IDX && g_Settings[ATT].param > 26) {
         g_Settings[ATT].param = 26;
     }
-    agcSetFunc(); // aplicar AGC con el valor ya validado
+
+    // aplicar AGC con el valor ya validado
+    uint8_t currentAtt = g_Settings[SettingsIndex::ATT].param;
+    if (currentAtt == 0) g_si4735.setAutomaticGainControl(1, 0);
+    else g_si4735.setAutomaticGainControl(0, currentAtt);
 
     g_currentFrequency = g_bandList[g_bandIndex].currentFreq;
     if (g_bandIndex == FM_IDX) {
-//        g_si4735.setFM(g_bandList[g_bandIndex].minimumFreq, g_bandList[g_bandIndex].maximumFreq, g_currentFrequency, g_tabStepFM[g_FMStepIndex]);
         g_si4735.setFM(g_bandList[g_bandIndex].minimumFreq, g_bandList[g_bandIndex].maximumFreq, g_currentFrequency, pgm_read_byte(&g_tabStepFM[g_FMStepIndex]));
     } else {
         g_si4735.setAM(g_bandList[g_bandIndex].minimumFreq, g_bandList[g_bandIndex].maximumFreq, g_currentFrequency, (int)pgm_read_word(&g_tabStep[g_stepIndex]));
@@ -76,47 +122,28 @@ void updateBFO()
     }
 }
 
-void agcSetFunc()
-{
-    uint8_t currentAtt = g_Settings[SettingsIndex::ATT].param;
-    if (currentAtt == 0) g_si4735.setAutomaticGainControl(1, 0);
-    else g_si4735.setAutomaticGainControl(0, currentAtt);
-}
-
 void doBand(int8_t v)
 {
-    bandSwitch(v > 0); // Si v es 1 sube, si es -1 baja
-}
-
-static void loadSSBPatch()
-{
-    if (!g_ssbLoaded) {
-        g_si4735.queryLibraryId();
-        g_si4735.patchPowerUp();
-	g_si4735.downloadCompressedPatch(ssb_patch_content, sizeof(ssb_patch_content), cmd_0x15, sizeof(cmd_0x15) / sizeof(cmd_0x15[0]));
-        g_si4735.setSSBConfig(
-            g_bandwidthSSB[g_bwIndexSSB].idx, // BW
-            1,   // audioBW
-            0,   // ssbaudioBWsnrBoost
-            0,   // ssbFilterPower
-            1,   // ssbSBUFIntegRate
-            0    // reserved
-        );
-        g_ssbLoaded = true;
+    g_scanning = false;
+    if (v > 0) {
+        if (g_bandIndex < LAST_BAND) g_bandIndex++;
+        else g_bandIndex = 0;
+    } else {
+        if (g_bandIndex > 0) g_bandIndex--;
+        else g_bandIndex = LAST_BAND;
     }
+    g_currentBFO = 0;
+    applyBandConfiguration();
 }
 
 void doMode(int8_t v)
 {
-    if (g_bandIndex == FM_IDX) return;
+    if (g_bandIndex == FM_IDX || g_bandIndex == AIR_IDX) return;
 
-    // CW siempre al final — truncar el count si está desactivado
     static const uint8_t s_modeOrder[] PROGMEM = { AM, LSB, USB, CW };
     const uint8_t modeCount = g_Settings[CWSwitch].param ? 4 : 3;
 
-    // Si estamos en CW pero CW está desactivado, forzar a AM antes de ciclar
-    if (g_currentMode == CW && modeCount == 3)
-        g_currentMode = AM;
+    if (g_currentMode == CW && modeCount == 3) g_currentMode = AM;
 
     uint8_t idx = 0;
     for (uint8_t i = 0; i < modeCount; i++) {
@@ -128,23 +155,7 @@ void doMode(int8_t v)
     g_currentMode = (int8_t)pgm_read_byte(&s_modeOrder[idx]);
 
     g_currentBFO = 0;
-
-    if (isSSB()) {
-        loadSSBPatch();
-        g_si4735.setSSB(
-            g_bandList[g_bandIndex].minimumFreq,
-            g_bandList[g_bandIndex].maximumFreq,
-            g_currentFrequency,
-            (int)pgm_read_word(&g_tabStep[g_stepIndex]),
-	    g_currentMode == LSB ? 1 : (g_currentMode == CW ? (g_Settings[CWSide].param == 0 ? 1 : 2) : 2)
-        );
-        g_si4735.setSSBBfo(0);
-        updateSSBCutoffFilter();
-	showStatus(true);
-    } else {
-        g_ssbLoaded = false;
-        applyBandConfiguration();
-    }
+    applyRadioState();
 }
 
 static inline void wrapIndex(int8_t &idx, int8_t v, int8_t maxIdx)

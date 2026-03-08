@@ -1,6 +1,6 @@
 /**
  * @file    State.cpp
- * @brief   Variables de estado global, configuración de settings y bandas.
+ * @brief   Implementación de variables globales, arrays de configuración y tablas PROGMEM.
  * @author  Alonso José Lara Plana (EA7LBT)
  * @license MIT — ver ATS-ULTIMATE.ino para texto completo
  */
@@ -70,7 +70,6 @@ const char* g_bandwidthFM[] = { "AUTO", "110k", " 84k", " 60k", " 40k" };
 const int g_tabStep[] PROGMEM = { 1, 5, 9, 10, 50, 100, 1000, 1, 5, 10, 25, 50, 100, 500 };
 volatile int8_t g_stepIndex = 3;
 
-//int8_t g_tabStepFM[] = { 5, 10, 100 };
 const int8_t g_tabStepFM[] PROGMEM = { 5, 10, 100 };
 uint8_t g_FMStepIndex = 1;
 
@@ -81,11 +80,12 @@ Band g_bandList[] = {
     { SW_LIMIT_LOW, SW_LIMIT_HIGH, SW_LIMIT_LOW, 0, 4 },  // SW
     { 8750,         10800,         9580,         1, 0 },  // FM
     { CB_LIMIT_LOW, 27405,         27185,        0, 4 },  // CB
+    { 10800,        13700,         12100,        1, 4 },  // AIR
 };
 
 int8_t g_bandIndex = 1; // Empezar en MW por defecto
 
-const uint16_t SWSubBands[] PROGMEM = { SW_LIMIT_LOW, 3500, 4500, 5500, 6500, 7500, 9000, 11000, 13000, 14500, 16000, 18000, 21000, 24000, 26000, CB_LIMIT_LOW };
+const uint16_t SWSubBands[] PROGMEM = {SW_LIMIT_LOW,1800,3500,4500,5357,5500,6500,7325,7500,9000,11000,13000,14500,16000,18100,21000,24000,24940,26000,CB_LIMIT_LOW};
 
 volatile int8_t g_encoderCount = 0;
 uint16_t g_currentFrequency = 0;
@@ -98,3 +98,12 @@ bool g_screenOn = true;
 bool g_scanning = false;
 bool g_bandSelectMode = false;
 bool g_usbPowered = false;
+
+// sistema de memoria
+bool g_memoryMode = false;
+int8_t g_memoryIndex = 0;
+MemoryChannel g_previewMemory = {0, 0, 0, 0};
+
+bool g_bandLocked = false;
+bool g_snrMode = false;
+uint32_t g_lastDoublePress = 0;
